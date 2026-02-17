@@ -138,9 +138,8 @@ export async function handleWeChatMessage(params: {
       cfg,
       agentId: route.agentId,
       runtime: runtime as RuntimeEnv,
-      apiKey: account.apiKey,
+      account,
       replyTo,
-      accountId: account.accountId,
     });
 
     log(`wechat[${accountId}]: dispatching to agent (session=${route.sessionKey})`);

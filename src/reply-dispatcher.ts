@@ -5,21 +5,22 @@ import type {
 } from "openclaw/plugin-sdk";
 import { createReplyPrefixContext } from "openclaw/plugin-sdk";
 import { getWeChatRuntime } from "./runtime.js";
-import { ProxyClient } from "./proxy-client.js";
+import { BridgeClient } from "./bridge-client.js";
+import type { ResolvedWeChatAccount } from "./types.js";
 
 export type CreateWeChatReplyDispatcherParams = {
   cfg: ClawdbotConfig;
   agentId: string;
   runtime: RuntimeEnv;
-  apiKey: string;
+  account: ResolvedWeChatAccount;
   /** The wcId to send replies to (sender or group) */
   replyTo: string;
-  accountId?: string;
 };
 
 export function createWeChatReplyDispatcher(params: CreateWeChatReplyDispatcherParams) {
   const core = getWeChatRuntime();
-  const { cfg, agentId, runtime, apiKey, replyTo, accountId } = params;
+  const { cfg, agentId, runtime, account, replyTo } = params;
+  const accountId = account.accountId;
 
   const prefixContext = createReplyPrefixContext({
     cfg,
@@ -33,7 +34,10 @@ export function createWeChatReplyDispatcher(params: CreateWeChatReplyDispatcherP
   });
   const chunkMode = core.channel.text.resolveChunkMode(cfg, "wechat");
 
-  const client = new ProxyClient({ apiKey, accountId: accountId || "default" });
+  const client = new BridgeClient({ 
+    accountId, 
+    baseUrl: account.bridgeUrl 
+  });
 
   const { dispatcher, replyOptions, markDispatchIdle } =
     core.channel.reply.createReplyDispatcherWithTyping({

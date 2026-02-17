@@ -7,12 +7,9 @@
 export interface WechatAccountConfig {
   enabled?: boolean;
   name?: string;
-  apiKey: string;
-  proxyUrl?: string;       // 代理服务地址
-  deviceType?: "ipad" | "mac";
-  proxy?: string;          // 网络线路
-  webhookHost?: string;    // Webhook 公网地址（IP 或域名）
-  webhookPort?: number;
+  bridgeUrl: string;       // Bridge 服务地址（必须）
+  webhookHost?: string;    // Webhook 地址（默认 localhost）
+  webhookPort?: number;    // Webhook 端口（默认 18790）
   webhookPath?: string;    // Webhook 路径，默认 /webhook/wechat
   natappEnabled?: boolean;
   natapiWebPort?: number;
@@ -25,12 +22,9 @@ export interface WechatConfig {
   enabled?: boolean;
 
   // 简化配置（单账号，顶级字段）
-  apiKey?: string;
-  proxyUrl?: string;
-  deviceType?: "ipad" | "mac";
-  proxy?: string;
-  webhookHost?: string;    // Webhook 公网地址（IP 或域名）
-  webhookPort?: number;
+  bridgeUrl?: string;      // Bridge 服务地址（默认 http://localhost:3001）
+  webhookHost?: string;    // Webhook 地址（默认 localhost）
+  webhookPort?: number;    // Webhook 端口
   webhookPath?: string;    // Webhook 路径
 
   // 多账号配置（可选）
@@ -45,10 +39,7 @@ export const WechatConfigSchema = {
     enabled: { type: "boolean" },
 
     // 简化配置（顶级字段）
-    apiKey: { type: "string" },
-    proxyUrl: { type: "string" },
-    deviceType: { type: "string", enum: ["ipad", "mac"] },
-    proxy: { type: "string" },
+    bridgeUrl: { type: "string" },
     webhookHost: { type: "string" },
     webhookPort: { type: "integer" },
     webhookPath: { type: "string" },
@@ -62,10 +53,7 @@ export const WechatConfigSchema = {
         properties: {
           enabled: { type: "boolean" },
           name: { type: "string" },
-          apiKey: { type: "string" },
-          proxyUrl: { type: "string" },
-          deviceType: { type: "string", enum: ["ipad", "mac"] },
-          proxy: { type: "string" },
+          bridgeUrl: { type: "string" },
           webhookHost: { type: "string" },
           webhookPort: { type: "integer" },
           webhookPath: { type: "string" },
@@ -74,7 +62,7 @@ export const WechatConfigSchema = {
           wcId: { type: "string" },
           nickName: { type: "string" },
         },
-        required: ["apiKey"],
+        required: ["bridgeUrl"],
       },
     },
   },

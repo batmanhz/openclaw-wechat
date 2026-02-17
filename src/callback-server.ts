@@ -3,7 +3,6 @@ import type { WechatMessageContext } from "./types.js";
 
 interface CallbackServerOptions {
   port: number;
-  apiKey: string;
   onMessage: (message: WechatMessageContext) => void;
   abortSignal?: AbortSignal;
 }
@@ -64,60 +63,92 @@ export async function startCallbackServer(
 /**
  * Normalize the incoming payload into a flat shape.
  *
- * Two formats may arrive:
- *  1. 苍何服务云 raw: `{ messageType, wcId, data: { fromUser, content, newMsgId, ... } }`
- *  2. Proxy flat:  `{ messageType, wcId, fromUser, content, newMsgId, contentType, raw, ... }`
- *
- * We detect the proxy format by checking whether `fromUser` exists at the top level.
+ * Bridge webhook payload format:
+ * {
+ *   id: string;
+ *   type: "text" | "image" | "video" | "file" | "voice" | "unknown";
+ *   sender: { id: string; name: string };
+ *   recipient: { id: string };
+ *   content: string;
+ *   timestamp: number;
+ *   isGroup: boolean;
+ *   group?: { id: string; name: string };
+ *   mentions?: string[];
+ * }
  */
 function normalizePayload(payload: any): {
-  messageType: string;
-  wcId: string;
-  fromUser: string;
-  toUser?: string;
-  fromGroup?: string;
+  id: string;
+  type: string;
+  senderId: string;
+  senderName: string;
+  recipientId: string;
   content: string;
-  newMsgId?: string | number;
-  timestamp?: number;
-  contentType?: string;
+  timestamp: number;
+  isGroup: boolean;
+  groupId?: string;
+  groupName?: string;
+  mentions?: string[];
   raw: any;
 } {
-  const { messageType, wcId } = payload;
+  // Bridge format (new format)
+  if (payload.sender && payload.recipient) {
+    return {
+      id: payload.id || String(Date.now()),
+      type: payload.type || "unknown",
+      senderId: payload.sender.id,
+      senderName: payload.sender.name || payload.sender.id,
+      recipientId: payload.recipient.id,
+      content: payload.content || "",
+      timestamp: payload.timestamp || Date.now(),
+      isGroup: payload.isGroup || false,
+      groupId: payload.group?.id,
+      groupName: payload.group?.name,
+      mentions: payload.mentions,
+      raw: payload,
+    };
+  }
 
+  // Legacy proxy format (for backward compatibility)
   // Proxy flat format: fromUser is at top level
   if (payload.fromUser) {
+    const { messageType, wcId } = payload;
+    const isGroup = messageType?.startsWith("8");
+    
     return {
-      messageType,
-      wcId,
-      fromUser: payload.fromUser,
-      toUser: payload.toUser,
-      fromGroup: payload.fromGroup,
+      id: String(payload.newMsgId || Date.now()),
+      type: resolveMessageTypeFromCode(messageType),
+      senderId: payload.fromUser,
+      senderName: payload.fromUser,
+      recipientId: wcId,
       content: payload.content ?? "",
-      newMsgId: payload.newMsgId,
-      timestamp: payload.timestamp,
-      contentType: payload.contentType,
+      timestamp: payload.timestamp || Date.now(),
+      isGroup,
+      groupId: payload.fromGroup,
       raw: payload,
     };
   }
 
   // 苍何服务云 raw format: fields nested under data
   const data = payload.data ?? {};
+  const messageType = payload.messageType;
+  const isGroup = messageType?.startsWith("8");
+  
   return {
-    messageType,
-    wcId,
-    fromUser: data.fromUser,
-    toUser: data.toUser,
-    fromGroup: data.fromGroup,
+    id: String(data.newMsgId || Date.now()),
+    type: resolveMessageTypeFromCode(messageType),
+    senderId: data.fromUser,
+    senderName: data.fromUser,
+    recipientId: payload.wcId,
     content: data.content ?? "",
-    newMsgId: data.newMsgId,
-    timestamp: data.timestamp ?? payload.timestamp,
-    contentType: undefined,
+    timestamp: data.timestamp ?? payload.timestamp ?? Date.now(),
+    isGroup,
+    groupId: data.fromGroup,
     raw: payload,
   };
 }
 
 /** Map messageType code to a WechatMessageContext type */
-function resolveMessageType(messageType: string): WechatMessageContext["type"] {
+function resolveMessageTypeFromCode(messageType: string): string {
   switch (messageType) {
     case "60001": // private text
     case "80001": // group text
@@ -139,57 +170,42 @@ function resolveMessageType(messageType: string): WechatMessageContext["type"] {
   }
 }
 
-function isGroupMessage(messageType: string): boolean {
-  return messageType.startsWith("8");
-}
-
 function convertToMessageContext(payload: any): WechatMessageContext | null {
-  const { messageType } = payload;
-
-  // Offline notification
-  if (messageType === "30000") {
+  // Legacy: Offline notification
+  if (payload.messageType === "30000") {
     const wcId = payload.wcId;
     const offlineContent = payload.content ?? payload.data?.content;
     console.log(`Account ${wcId} is offline: ${offlineContent}`);
     return null;
   }
 
-  // Only handle known private/group message types (6xxxx / 8xxxx)
-  if (!messageType || (!messageType.startsWith("6") && !messageType.startsWith("8"))) {
-    console.log(`Received unhandled message type ${messageType}`);
-    return null;
-  }
-
   const norm = normalizePayload(payload);
 
-  if (!norm.fromUser) {
-    console.log(`Message missing fromUser, skipping`);
+  if (!norm.senderId) {
+    console.log(`Message missing senderId, skipping`);
     return null;
   }
 
-  const msgType = resolveMessageType(messageType);
-  const isGroup = isGroupMessage(messageType);
-
   const result: WechatMessageContext = {
-    id: String(norm.newMsgId || Date.now()),
-    type: msgType,
+    id: norm.id,
+    type: norm.type as WechatMessageContext["type"],
     sender: {
-      id: norm.fromUser,
-      name: norm.fromUser,
+      id: norm.senderId,
+      name: norm.senderName,
     },
     recipient: {
-      id: norm.wcId,
+      id: norm.recipientId,
     },
     content: norm.content,
-    timestamp: norm.timestamp || Date.now(),
-    threadId: isGroup ? (norm.fromGroup || norm.fromUser) : norm.fromUser,
+    timestamp: norm.timestamp,
+    threadId: norm.isGroup ? (norm.groupId || norm.senderId) : norm.senderId,
     raw: norm.raw,
   };
 
-  if (isGroup && norm.fromGroup) {
+  if (norm.isGroup && norm.groupId) {
     result.group = {
-      id: norm.fromGroup,
-      name: "",
+      id: norm.groupId,
+      name: norm.groupName || "",
     };
   }
 

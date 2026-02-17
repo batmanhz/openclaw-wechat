@@ -1,21 +1,26 @@
 import type { ChannelPlugin, ClawdbotConfig } from "openclaw/plugin-sdk";
 import { DEFAULT_ACCOUNT_ID } from "openclaw/plugin-sdk";
 import type { ResolvedWeChatAccount, WechatConfig, WechatAccountConfig } from "./types.js";
-import { ProxyClient } from "./proxy-client.js";
+import { BridgeClient } from "./bridge-client.js";
 import { startCallbackServer } from "./callback-server.js";
 import { handleWeChatMessage } from "./bot.js";
 import { displayQRCode, displayLoginSuccess } from "./utils/qrcode.js";
 
-// 代理服务地址（必须配置）
-// openclaw config set channels.wechat.proxyUrl "http://your-proxy-server:3000"
+// Bridge 服务地址（本地部署，无需公网 IP）
+// openclaw config set channels.wechat.bridgeUrl "http://localhost:3001"
+
+const DEFAULT_BRIDGE_URL = "http://localhost:3001";
+const DEFAULT_WEBHOOK_HOST = "localhost";
+const DEFAULT_WEBHOOK_PORT = 18790;
+const DEFAULT_WEBHOOK_PATH = "/webhook/wechat";
 
 const PLUGIN_META = {
   id: "wechat",
   label: "WeChat",
-  selectionLabel: "WeChat (微信)",
+  selectionLabel: "WeChat (微信) - 本地部署",
   docsPath: "/channels/wechat",
   docsLabel: "wechat",
-  blurb: "WeChat channel via Proxy API. 购买 API Key 请联系客服",
+  blurb: "WeChat channel via local Wechaty Bridge. 完全本地部署，无需购买 API Key",
   order: 80,
 } as const;
 
@@ -39,10 +44,7 @@ async function resolveWeChatAccount({
   if (isDefault) {
     // 简化配置：从顶级字段读取，合并默认账号配置
     const topLevelConfig: WechatAccountConfig = {
-      apiKey: wechatCfg?.apiKey || "",
-      proxyUrl: wechatCfg?.proxyUrl,
-      deviceType: wechatCfg?.deviceType,
-      proxy: wechatCfg?.proxy,
+      bridgeUrl: wechatCfg?.bridgeUrl || DEFAULT_BRIDGE_URL,
       webhookHost: wechatCfg?.webhookHost,
       webhookPort: wechatCfg?.webhookPort,
       webhookPath: wechatCfg?.webhookPath,
@@ -53,7 +55,7 @@ async function resolveWeChatAccount({
     accountCfg = {
       ...topLevelConfig,
       ...defaultAccount,
-      apiKey: topLevelConfig.apiKey || defaultAccount?.apiKey || "",
+      bridgeUrl: topLevelConfig.bridgeUrl || defaultAccount?.bridgeUrl || DEFAULT_BRIDGE_URL,
     };
 
     enabled = accountCfg.enabled ?? wechatCfg?.enabled ?? true;
@@ -62,18 +64,11 @@ async function resolveWeChatAccount({
     enabled = accountCfg?.enabled ?? true;
   }
 
-  if (!accountCfg?.apiKey) {
+  if (!accountCfg?.bridgeUrl) {
     throw new Error(
-      `缺少 API Key。\n` +
-        `请联系客服购买 API Key\n` +
-        `然后配置: openclaw config set channels.wechat.apiKey "your-key"`
-    );
-  }
-
-  if (!accountCfg?.proxyUrl) {
-    throw new Error(
-      `缺少 proxyUrl 配置。\n` +
-        `请配置: openclaw config set channels.wechat.proxyUrl "http://your-proxy-server:3000"`
+      `缺少 bridgeUrl 配置。\n` +
+        `请先启动 Bridge 服务: npm run start:bridge\n` +
+        `然后配置: openclaw config set channels.wechat.bridgeUrl "http://localhost:3001"`
     );
   }
 
@@ -82,16 +77,13 @@ async function resolveWeChatAccount({
     enabled,
     configured: true,
     name: accountCfg.name,
-    apiKey: accountCfg.apiKey,
-    proxyUrl: accountCfg.proxyUrl,
+    bridgeUrl: accountCfg.bridgeUrl,
     wcId: accountCfg.wcId,
     isLoggedIn: !!accountCfg.wcId,
     nickName: accountCfg.nickName,
-    deviceType: accountCfg.deviceType || "ipad",
-    proxy: accountCfg.proxy || "2",
-    webhookHost: accountCfg.webhookHost,
-    webhookPort: accountCfg.webhookPort || 18790,
-    webhookPath: accountCfg.webhookPath || "/webhook/wechat",
+    webhookHost: accountCfg.webhookHost || DEFAULT_WEBHOOK_HOST,
+    webhookPort: accountCfg.webhookPort || DEFAULT_WEBHOOK_PORT,
+    webhookPath: accountCfg.webhookPath || DEFAULT_WEBHOOK_PATH,
     natappEnabled: accountCfg.natappEnabled ?? false,
     natapiWebPort: accountCfg.natapiWebPort || 4040,
     config: accountCfg,
@@ -105,8 +97,8 @@ async function resolveWeChatAccount({
 function listWeChatAccountIds(cfg: ClawdbotConfig): string[] {
   const wechatCfg = cfg.channels?.wechat as WechatConfig | undefined;
 
-  // 如果有顶级 apiKey，则使用默认账号
-  if (wechatCfg?.apiKey) {
+  // 如果有顶级 bridgeUrl，则使用默认账号
+  if (wechatCfg?.bridgeUrl) {
     return [DEFAULT_ACCOUNT_ID];
   }
 
@@ -146,10 +138,7 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
       properties: {
         enabled: { type: "boolean" },
         // 简化配置（顶级字段）
-        apiKey: { type: "string" },
-        proxyUrl: { type: "string" },
-        deviceType: { type: "string", enum: ["ipad", "mac"] },
-        proxy: { type: "string" },
+        bridgeUrl: { type: "string" },
         webhookHost: { type: "string" },
         webhookPort: { type: "integer" },
         webhookPath: { type: "string" },
@@ -162,10 +151,7 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
             properties: {
               enabled: { type: "boolean" },
               name: { type: "string" },
-              apiKey: { type: "string" },
-              proxyUrl: { type: "string" },
-              deviceType: { type: "string", enum: ["ipad", "mac"] },
-              proxy: { type: "string" },
+              bridgeUrl: { type: "string" },
               webhookHost: { type: "string" },
               webhookPort: { type: "integer" },
               webhookPath: { type: "string" },
@@ -174,7 +160,7 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
               wcId: { type: "string" },
               nickName: { type: "string" },
             },
-            required: ["apiKey"],
+            required: ["bridgeUrl"],
           },
         },
       },
@@ -361,12 +347,11 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
       const account = await resolveWeChatAccount({ cfg, accountId });
       if (!account.isLoggedIn) return [];
 
-      const client = new ProxyClient({
-        apiKey: account.apiKey,
+      const client = new BridgeClient({
         accountId,
-        baseUrl: account.proxyUrl,
+        baseUrl: account.bridgeUrl,
       });
-      const contacts = await client.getContacts(account.wcId!);
+      const contacts = await client.getContacts();
 
       return contacts.friends.slice(0, limit).map((id) => ({
         id,
@@ -379,12 +364,11 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
       const account = await resolveWeChatAccount({ cfg, accountId });
       if (!account.isLoggedIn) return [];
 
-      const client = new ProxyClient({
-        apiKey: account.apiKey,
+      const client = new BridgeClient({
         accountId,
-        baseUrl: account.proxyUrl,
+        baseUrl: account.bridgeUrl,
       });
-      const contacts = await client.getContacts(account.wcId!);
+      const contacts = await client.getContacts();
 
       return contacts.chatrooms.slice(0, limit).map((id) => ({
         id,
@@ -415,19 +399,18 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
 
     probeAccount: async ({ cfg, accountId }) => {
       const account = await resolveWeChatAccount({ cfg, accountId });
-      const client = new ProxyClient({
-        apiKey: account.apiKey,
+      const client = new BridgeClient({
         accountId,
-        baseUrl: account.proxyUrl,
+        baseUrl: account.bridgeUrl,
       });
 
       try {
-        const status = await client.getStatus();
+        const health = await client.healthCheck();
         return {
-          ok: status.valid && status.isLoggedIn,
-          error: status.error,
-          wcId: status.wcId,
-          nickName: status.nickName,
+          ok: health.wechaty === "ready" && health.loggedIn,
+          error: health.wechaty !== "ready" ? `Wechaty status: ${health.wechaty}` : undefined,
+          wcId: undefined, // 需要额外获取
+          nickName: undefined,
         };
       } catch (err: any) {
         return {
@@ -458,31 +441,30 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
       const account = await resolveWeChatAccount({ cfg, accountId });
 
       log?.info(`Starting WeChat account: ${accountId}`);
-      log?.info(`Proxy URL: ${account.proxyUrl}`);
+      log?.info(`Bridge URL: ${account.bridgeUrl}`);
 
-      const client = new ProxyClient({
-        apiKey: account.apiKey,
+      const client = new BridgeClient({
         accountId,
-        baseUrl: account.proxyUrl,
+        baseUrl: account.bridgeUrl,
       });
 
-      // Check current status
-      const status = await client.getStatus();
-
-      if (!status.valid) {
-        throw new Error(`API Key invalid: ${status.error || "Unknown error"}`);
+      // Check Bridge health
+      let health;
+      try {
+        health = await client.healthCheck();
+        log?.info(`Bridge health check: ${health.status}, Wechaty: ${health.wechaty}`);
+      } catch (error: any) {
+        throw new Error(`Bridge connection failed: ${error.message}`);
       }
 
       // If not logged in, perform QR code login
-      if (!status.isLoggedIn) {
+      if (!health.loggedIn) {
         log?.info("Not logged in, starting QR code login flow");
 
-        const { qrCodeUrl, wId } = await client.getQRCode(
-          account.deviceType,
-          account.proxy
-        );
+        const { qrCodeUrl } = await client.getQRCode();
 
         await displayQRCode(qrCodeUrl);
+        log?.info("Please scan the QR code with WeChat to login");
 
         // Poll for login status
         let loggedIn = false;
@@ -495,7 +477,7 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
 
           await new Promise((r) => setTimeout(r, 5000));
 
-          const check = await client.checkLogin(wId);
+          const check = await client.checkLogin();
 
           if (check.status === "logged_in") {
             loggedIn = true;
@@ -513,7 +495,6 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
 
         displayLoginSuccess(loginResult.nickName, loginResult.wcId);
 
-        // Note: In real implementation, you'd need to save this config
         log?.info(`Login successful: ${loginResult.nickName} (${loginResult.wcId})`);
 
         // Update local account object
@@ -521,51 +502,31 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
         account.nickName = loginResult.nickName;
         account.isLoggedIn = true;
       } else {
-        log?.info(`Already logged in: ${status.nickName} (${status.wcId})`);
-        account.wcId = status.wcId;
-        account.nickName = status.nickName;
-        account.isLoggedIn = true;
+        log?.info(`Already logged in`);
+        // Try to get user info from status
+        const status = await client.checkLogin();
+        if (status.status === "logged_in") {
+          account.wcId = status.wcId;
+          account.nickName = status.nickName;
+          account.isLoggedIn = true;
+          log?.info(`User: ${status.nickName} (${status.wcId})`);
+        }
       }
 
       // Start webhook server to receive messages
       const port = account.webhookPort;
       setStatus({ accountId, port, running: true });
 
-      // Determine webhook URL for Proxy to forward messages
-      let webhookHost: string;
-
-      if (account.webhookHost) {
-        // 用户配置了公网地址
-        webhookHost = account.webhookHost;
-      } else {
-        // 自动检测本机 IP（适用于云服务器）
-        const { networkInterfaces } = await import("os");
-        const nets = networkInterfaces();
-        let localIp = "localhost";
-        for (const name of Object.keys(nets)) {
-          for (const net of nets[name] || []) {
-            if (net.family === "IPv4" && !net.internal) {
-              localIp = net.address;
-              break;
-            }
-          }
-          if (localIp !== "localhost") break;
-        }
-        webhookHost = localIp;
-        log?.warn(`webhookHost 未配置，使用自动检测的 IP: ${localIp}`);
-        log?.warn(`建议配置: openclaw config set channels.wechat.webhookHost "your-public-ip"`);
-      }
-
-      const webhookUrl = `http://${webhookHost}:${port}${account.webhookPath}`;
+      // Build webhook URL
+      const webhookUrl = `http://${account.webhookHost}:${port}${account.webhookPath}`;
       log?.info(`Using webhook URL: ${webhookUrl}`);
 
-      // Register webhook with proxy service
-      log?.info(`Registering webhook with proxy service for wcId: ${account.wcId}`);
-      await client.registerWebhook(account.wcId!, webhookUrl);
+      // Register webhook with Bridge
+      log?.info(`Registering webhook with Bridge service`);
+      await client.registerWebhook(webhookUrl);
 
       const { stop } = await startCallbackServer({
         port,
-        apiKey: account.apiKey,
         onMessage: (message) => {
           handleWeChatMessage({
             cfg,
@@ -598,10 +559,9 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
   outbound: {
     async sendText({ cfg, to, text, accountId }) {
       const account = await resolveWeChatAccount({ cfg, accountId });
-      const client = new ProxyClient({
-        apiKey: account.apiKey,
+      const client = new BridgeClient({
         accountId,
-        baseUrl: account.proxyUrl,
+        baseUrl: account.bridgeUrl,
       });
 
       if (!account.wcId) {
@@ -619,10 +579,9 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
 
     async sendMedia({ cfg, to, mediaUrl, text, accountId }) {
       const account = await resolveWeChatAccount({ cfg, accountId });
-      const client = new ProxyClient({
-        apiKey: account.apiKey,
+      const client = new BridgeClient({
         accountId,
-        baseUrl: account.proxyUrl,
+        baseUrl: account.bridgeUrl,
       });
 
       if (!account.wcId) {

@@ -8,15 +8,12 @@ export type ResolvedWeChatAccount = {
   enabled: boolean;
   configured: boolean;
   name?: string;
-  apiKey: string;
-  proxyUrl: string;        // 代理服务地址
+  bridgeUrl: string;       // Bridge 服务地址
   wcId?: string;
   isLoggedIn: boolean;
   nickName?: string;
   headUrl?: string;
-  deviceType: string;
-  proxy: string;
-  webhookHost?: string;    // Webhook 公网地址
+  webhookHost?: string;    // Webhook 地址（默认 localhost）
   webhookPort: number;
   webhookPath: string;     // Webhook 路径
   natappEnabled: boolean;
@@ -29,10 +26,9 @@ export type LoginStatus =
   | { status: "need_verify"; verifyUrl: string }
   | { status: "logged_in"; wcId: string; nickName: string; headUrl?: string };
 
-export type ProxyClientConfig = {
-  apiKey: string;
+export type BridgeClientConfig = {
   accountId: string;
-  baseUrl?: string;
+  baseUrl: string;
 };
 
 export type WechatMessageContext = {
