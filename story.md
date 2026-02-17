@@ -348,25 +348,68 @@ channels:
 
 **任务清单**:
 1. 会话持久化
-   - [ ] 实现 MemoryCard 存储
-   - [ ] 配置会话文件路径
-   - [ ] 实现会话恢复逻辑
+   - [x] 实现 MemoryCard 存储
+   - [x] 配置会话文件路径
+   - [x] 实现会话恢复逻辑
 
 2. 自动重连
-   - [ ] 监听断线事件
-   - [ ] 实现指数退避重试
-   - [ ] 配置最大重试次数
-   - [ ] 添加重连日志
+   - [x] 监听断线事件
+   - [x] 实现指数退避重试
+   - [x] 配置最大重试次数
+   - [x] 添加重连日志
 
 3. 心跳检测
-   - [ ] 实现定时心跳
-   - [ ] 检测服务健康状态
-   - [ ] 异常时触发重连
+   - [x] 实现定时心跳
+   - [x] 检测服务健康状态
+   - [x] 异常时触发重连
+
+**实现详情**:
+
+1. **wechaty-client.ts 增强**:
+   - 添加 `MemoryCard` 依赖用于会话持久化
+   - 实现 `initMemoryCard()` 方法初始化会话存储
+   - 实现 `saveSession()` 方法保存登录状态
+   - 实现 `restoreSession()` 方法恢复会话
+   - 添加自动重连机制，支持指数退避（最大60秒）
+   - 实现心跳检测，每30秒检测一次连接状态
+   - 连续3次心跳失败触发重连
+   - 添加事件：`reconnecting`, `reconnected`, `reconnectFailed`, `reconnectExhausted`, `heartbeat`, `heartbeatFailed`
+
+2. **server.ts 增强**:
+   - 添加新 API 接口：`/v1/reconnect/status` 获取重连状态
+   - 添加新 API 接口：`/v1/heartbeat/status` 获取心跳状态
+   - 添加重连和心跳事件日志
+   - 支持环境变量配置：`WECHATY_MEMORY_CARD_PATH`, `WECHATY_RECONNECT_INTERVAL`, `WECHATY_MAX_RECONNECT_ATTEMPTS`, `WECHATY_HEARTBEAT_INTERVAL`
+
+**配置示例**:
+```yaml
+channels:
+  wechat:
+    enabled: true
+    bridgeUrl: "http://localhost:3001"
+    webhookHost: "localhost"
+    webhookPort: 18790
+    webhookPath: "/webhook/wechat"
+```
+
+**环境变量**:
+```bash
+WECHATY_MEMORY_CARD_PATH=./data          # 会话存储路径
+WECHATY_RECONNECT_INTERVAL=5000          # 重连间隔基数（毫秒）
+WECHATY_MAX_RECONNECT_ATTEMPTS=10        # 最大重连次数
+WECHATY_HEARTBEAT_INTERVAL=30000         # 心跳检测间隔（毫秒）
+```
+
+**API 新增端点**:
+- `GET /v1/reconnect/status` - 获取重连状态
+- `GET /v1/heartbeat/status` - 获取心跳状态
 
 **验收标准**:
-- 重启服务后可以自动恢复登录状态
-- 断线后可以自动重连
-- 心跳机制正常工作
+- [x] 重启服务后可以自动恢复登录状态
+- [x] 断线后可以自动重连
+- [x] 心跳机制正常工作
+
+**Story 4 完成！** 🎉
 
 ---
 

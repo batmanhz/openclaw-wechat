@@ -10,6 +10,10 @@ export interface BridgeConfig {
     name?: string;
     puppet?: string;
     puppetToken?: string;
+    memoryCardPath?: string;
+    reconnectInterval?: number;
+    maxReconnectAttempts?: number;
+    heartbeatInterval?: number;
   };
 }
 
@@ -139,6 +143,24 @@ export class BridgeServer {
       });
     });
 
+    // 获取重连状态
+    this.app.get('/v1/reconnect/status', (req, res) => {
+      const status = this.client.getReconnectStatus();
+      res.json({
+        code: '1000',
+        data: status,
+      });
+    });
+
+    // 获取心跳状态
+    this.app.get('/v1/heartbeat/status', (req, res) => {
+      const status = this.client.getHeartbeatStatus();
+      res.json({
+        code: '1000',
+        data: status,
+      });
+    });
+
     // 测试消息发送（仅用于开发测试）
     this.app.post('/v1/test/send-message', async (req, res) => {
       try {
@@ -213,6 +235,32 @@ export class BridgeServer {
 
     this.client.on('error', (error: Error) => {
       console.error('Bridge: Client error:', error);
+    });
+
+    // 重连相关事件
+    this.client.on('reconnecting', (data: { attempt: number; maxAttempts: number; delay: number }) => {
+      console.log(`Bridge: Reconnecting... Attempt ${data.attempt}/${data.maxAttempts} in ${Math.round(data.delay/1000)}s`);
+    });
+
+    this.client.on('reconnected', () => {
+      console.log('Bridge: Reconnected successfully!');
+    });
+
+    this.client.on('reconnectFailed', (data: { attempt: number; error: string }) => {
+      console.error(`Bridge: Reconnect attempt ${data.attempt} failed: ${data.error}`);
+    });
+
+    this.client.on('reconnectExhausted', (data: { maxAttempts: number }) => {
+      console.error(`Bridge: Reconnect exhausted after ${data.maxAttempts} attempts`);
+    });
+
+    // 心跳相关事件
+    this.client.on('heartbeat', (data: { status: string; timestamp: number }) => {
+      console.log(`Bridge: Heartbeat OK at ${new Date(data.timestamp).toISOString()}`);
+    });
+
+    this.client.on('heartbeatFailed', (data: { missedCount: number }) => {
+      console.error(`Bridge: Heartbeat failed, missed ${data.missedCount} times`);
     });
   }
 
@@ -309,6 +357,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       name: process.env.WECHATY_NAME || 'openclaw-wechat',
       puppet: process.env.WECHATY_PUPPET || 'wechaty-puppet-wechat',
       puppetToken: process.env.WECHATY_PUPPET_TOKEN,
+      memoryCardPath: process.env.WECHATY_MEMORY_CARD_PATH || './data',
+      reconnectInterval: parseInt(process.env.WECHATY_RECONNECT_INTERVAL || '5000'),
+      maxReconnectAttempts: parseInt(process.env.WECHATY_MAX_RECONNECT_ATTEMPTS || '10'),
+      heartbeatInterval: parseInt(process.env.WECHATY_HEARTBEAT_INTERVAL || '30000'),
     },
   };
 
