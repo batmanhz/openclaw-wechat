@@ -7,7 +7,15 @@
   "files": [
     "index.ts",
     "src",
-    "openclaw.plugin.json"
+    "openclaw.plugin.json",
+    "package.json",
+    "tsconfig.json",
+    ".env",
+    ".env.example",
+    "start-bridge.sh",
+    "setup.sh",
+    "configure-openclaw.sh",
+    "openclaw-wechat.service"
   ],
   "repository": {
     "type": "git",
@@ -22,6 +30,7 @@
     "claude"
   ],
   "openclaw": {
+    "id": "wechat",
     "extensions": [
       "./index.ts"
     ],
@@ -51,18 +60,32 @@
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/node": "^20.10.0",
+    "@types/supertest": "^6.0.2",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.56.0",
     "openclaw": ">=2026.2.9",
+    "prettier": "^3.2.0",
+    "supertest": "^6.3.4",
     "tsx": "^4.21.0",
     "typescript": "^5.3.0",
+    "vitest": "^1.2.0",
     "zod": "^3.22.4"
   },
   "peerDependencies": {
     "openclaw": ">=2026.2.9"
   },
   "scripts": {
-    "test": "npx tsx test-channel.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:old": "npx tsx test-channel.ts",
     "test:plugin": "npx tsx test-plugin.ts",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint . --ext .ts",
+    "lint:fix": "eslint . --ext .ts --fix",
+    "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\"",
     "start:bridge": "npx tsx src/bridge/server.ts"
   }
 }

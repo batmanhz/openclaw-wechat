@@ -1,0 +1,23 @@
+[Unit]
+Description=OpenClaw WeChat Bridge Service
+After=network.target
+
+[Service]
+Type=simple
+User=%I
+WorkingDirectory=/opt/openclaw-wechat
+ExecStart=/usr/bin/npm run start:bridge
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=openclaw-wechat
+
+# Resource limits
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

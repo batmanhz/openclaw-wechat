@@ -1,26 +1,26 @@
-import type { ChannelPlugin, ClawdbotConfig } from "openclaw/plugin-sdk";
-import { DEFAULT_ACCOUNT_ID } from "openclaw/plugin-sdk";
-import type { ResolvedWeChatAccount, WechatConfig, WechatAccountConfig } from "./types.js";
-import { BridgeClient } from "./bridge-client.js";
-import { startCallbackServer } from "./callback-server.js";
-import { handleWeChatMessage } from "./bot.js";
-import { displayQRCode, displayLoginSuccess } from "./utils/qrcode.js";
+import type { ChannelPlugin, ClawdbotConfig } from 'openclaw/plugin-sdk';
+import { DEFAULT_ACCOUNT_ID } from 'openclaw/plugin-sdk';
+import type { ResolvedWeChatAccount, WechatConfig, WechatAccountConfig } from './types.js';
+import { BridgeClient } from './bridge-client.js';
+import { startCallbackServer } from './callback-server.js';
+import { handleWeChatMessage } from './bot.js';
+import { displayQRCode, displayLoginSuccess } from './utils/qrcode.js';
 
 // Bridge 服务地址（本地部署，无需公网 IP）
 // openclaw config set channels.wechat.bridgeUrl "http://localhost:3001"
 
-const DEFAULT_BRIDGE_URL = "http://localhost:3001";
-const DEFAULT_WEBHOOK_HOST = "localhost";
+const DEFAULT_BRIDGE_URL = 'http://localhost:3001';
+const DEFAULT_WEBHOOK_HOST = 'localhost';
 const DEFAULT_WEBHOOK_PORT = 18790;
-const DEFAULT_WEBHOOK_PATH = "/webhook/wechat";
+const DEFAULT_WEBHOOK_PATH = '/webhook/wechat';
 
 const PLUGIN_META = {
-  id: "wechat",
-  label: "WeChat",
-  selectionLabel: "WeChat (微信) - 本地部署",
-  docsPath: "/channels/wechat",
-  docsLabel: "wechat",
-  blurb: "WeChat channel via local Wechaty Bridge. 完全本地部署，无需购买 API Key",
+  id: 'wechat',
+  label: 'WeChat',
+  selectionLabel: 'WeChat (微信) - 本地部署',
+  docsPath: '/channels/wechat',
+  docsLabel: 'wechat',
+  blurb: 'WeChat channel via local Wechaty Bridge. 完全本地部署，无需购买 API Key',
   order: 80,
 } as const;
 
@@ -35,7 +35,9 @@ async function resolveWeChatAccount({
   cfg: ClawdbotConfig;
   accountId: string;
 }): Promise<ResolvedWeChatAccount> {
+  console.log('[DEBUG] resolveWeChatAccount called, cfg.channels:', JSON.stringify(cfg.channels));
   const wechatCfg = cfg.channels?.wechat as WechatConfig | undefined;
+  console.log('[DEBUG] wechatCfg:', JSON.stringify(wechatCfg));
   const isDefault = accountId === DEFAULT_ACCOUNT_ID;
 
   let accountCfg: WechatAccountConfig | undefined;
@@ -65,11 +67,13 @@ async function resolveWeChatAccount({
   }
 
   if (!accountCfg?.bridgeUrl) {
-    throw new Error(
-      `缺少 bridgeUrl 配置。\n` +
-        `请先启动 Bridge 服务: npm run start:bridge\n` +
-        `然后配置: openclaw config set channels.wechat.bridgeUrl "http://localhost:3001"`
-    );
+    console.log('[DEBUG] bridgeUrl missing, using default:', DEFAULT_BRIDGE_URL);
+    accountCfg = {
+      bridgeUrl: DEFAULT_BRIDGE_URL,
+      webhookHost: DEFAULT_WEBHOOK_HOST,
+      webhookPort: DEFAULT_WEBHOOK_PORT,
+      webhookPath: DEFAULT_WEBHOOK_PATH,
+    };
   }
 
   return {
@@ -110,12 +114,12 @@ function listWeChatAccountIds(cfg: ClawdbotConfig): string[] {
 }
 
 export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
-  id: "wechat",
+  id: 'wechat',
 
   meta: PLUGIN_META,
 
   capabilities: {
-    chatTypes: ["direct", "channel"],
+    chatTypes: ['direct', 'channel'],
     polls: false,
     threads: false,
     media: true,
@@ -126,43 +130,24 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
 
   agentPrompt: {
     messageToolHints: () => [
-      "- WeChat targeting: use `user:<wcId>` for direct messages, `group:<chatRoomId>` for groups.",
-      "- WeChat supports text, image, and file messages.",
+      '- WeChat targeting: use `user:<wcId>` for direct messages, `group:<chatRoomId>` for groups.',
+      '- WeChat supports text, image, and file messages.',
     ],
   },
 
   configSchema: {
     schema: {
-      type: "object" as const,
-      additionalProperties: false,
+      type: 'object' as const,
+      additionalProperties: true,
       properties: {
-        enabled: { type: "boolean" },
+        enabled: { type: 'boolean' },
         // 简化配置（顶级字段）
-        bridgeUrl: { type: "string" },
-        webhookHost: { type: "string" },
-        webhookPort: { type: "integer" },
-        webhookPath: { type: "string" },
+        bridgeUrl: { type: 'string' },
+        webhookHost: { type: 'string' },
+        webhookPort: { type: 'integer' },
+        webhookPath: { type: 'string' },
         // 多账号配置
-        accounts: {
-          type: "object" as const,
-          additionalProperties: {
-            type: "object" as const,
-            additionalProperties: true,
-            properties: {
-              enabled: { type: "boolean" },
-              name: { type: "string" },
-              bridgeUrl: { type: "string" },
-              webhookHost: { type: "string" },
-              webhookPort: { type: "integer" },
-              webhookPath: { type: "string" },
-              natappEnabled: { type: "boolean" },
-              natapiWebPort: { type: "integer" },
-              wcId: { type: "string" },
-              nickName: { type: "string" },
-            },
-            required: ["bridgeUrl"],
-          },
-        },
+        // accounts: { ... } // Removed due to UI incompatibility
       },
     },
   },
@@ -321,29 +306,29 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
 
   messaging: {
     normalizeTarget: (target) => {
-      if (target.startsWith("user:")) {
-        return { type: "direct", id: target.slice(5) };
+      if (target.startsWith('user:')) {
+        return { type: 'direct', id: target.slice(5) };
       }
-      if (target.startsWith("group:")) {
-        return { type: "channel", id: target.slice(6) };
+      if (target.startsWith('group:')) {
+        return { type: 'channel', id: target.slice(6) };
       }
       // Assume direct message if no prefix
-      return { type: "direct", id: target };
+      return { type: 'direct', id: target };
     },
 
     targetResolver: {
       looksLikeId: (id) => {
         // wcId starts with wxid_ or is a chatroom ID
-        return id.startsWith("wxid_") || id.includes("@chatroom");
+        return id.startsWith('wxid_') || id.includes('@chatroom');
       },
-      hint: "<wxid_xxx|xxxx@chatroom|user:wxid_xxx|group:xxx@chatroom>",
+      hint: '<wxid_xxx|xxxx@chatroom|user:wxid_xxx|group:xxx@chatroom>',
     },
   },
 
   directory: {
     self: async () => null,
 
-    listPeers: async ({ cfg, query, limit, accountId }) => {
+    listPeers: async ({ cfg, query, limit = 100, accountId }) => {
       const account = await resolveWeChatAccount({ cfg, accountId });
       if (!account.isLoggedIn) return [];
 
@@ -351,16 +336,36 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
         accountId,
         baseUrl: account.bridgeUrl,
       });
-      const contacts = await client.getContacts();
 
-      return contacts.friends.slice(0, limit).map((id) => ({
-        id,
-        name: id,
-        type: "user" as const,
-      }));
+      try {
+        const addressList = await client.getAddressList();
+
+        let friends = addressList.friends;
+
+        // 如果有查询条件，过滤联系人
+        if (query) {
+          const lowerQuery = query.toLowerCase();
+          friends = friends.filter(
+            (f) =>
+              f.name.toLowerCase().includes(lowerQuery) ||
+              f.alias?.toLowerCase().includes(lowerQuery) ||
+              f.id.toLowerCase().includes(lowerQuery)
+          );
+        }
+
+        return friends.slice(0, limit).map((friend) => ({
+          id: friend.id,
+          name: friend.alias || friend.name || friend.id,
+          type: 'user' as const,
+          avatar: friend.avatar,
+        }));
+      } catch (error: any) {
+        console.warn('Failed to list peers:', error.message);
+        return [];
+      }
     },
 
-    listGroups: async ({ cfg, query, limit, accountId }) => {
+    listGroups: async ({ cfg, query, limit = 50, accountId }) => {
       const account = await resolveWeChatAccount({ cfg, accountId });
       if (!account.isLoggedIn) return [];
 
@@ -368,13 +373,55 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
         accountId,
         baseUrl: account.bridgeUrl,
       });
-      const contacts = await client.getContacts();
 
-      return contacts.chatrooms.slice(0, limit).map((id) => ({
-        id,
-        name: id,
-        type: "group" as const,
-      }));
+      try {
+        const addressList = await client.getAddressList();
+
+        let chatrooms = addressList.chatrooms;
+
+        // 如果有查询条件，过滤群
+        if (query) {
+          const lowerQuery = query.toLowerCase();
+          chatrooms = chatrooms.filter(
+            (r) =>
+              r.name.toLowerCase().includes(lowerQuery) || r.id.toLowerCase().includes(lowerQuery)
+          );
+        }
+
+        return chatrooms.slice(0, limit).map((room) => ({
+          id: room.id,
+          name: room.name || room.id,
+          type: 'group' as const,
+          memberCount: room.memberCount,
+        }));
+      } catch (error: any) {
+        console.warn('Failed to list groups:', error.message);
+        return [];
+      }
+    },
+
+    listGroupMembers: async ({ cfg, groupId, accountId }) => {
+      const account = await resolveWeChatAccount({ cfg, accountId });
+      if (!account.isLoggedIn) return [];
+
+      const client = new BridgeClient({
+        accountId,
+        baseUrl: account.bridgeUrl,
+      });
+
+      try {
+        const members = await client.getRoomMembers(groupId);
+
+        return members.map((member) => ({
+          id: member.id,
+          name: member.roomAlias || member.name || member.id,
+          type: 'user' as const,
+          avatar: member.avatar,
+        }));
+      } catch (error: any) {
+        console.warn(`Failed to list members for group ${groupId}:`, error.message);
+        return [];
+      }
     },
   },
 
@@ -407,8 +454,8 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
       try {
         const health = await client.healthCheck();
         return {
-          ok: health.wechaty === "ready" && health.loggedIn,
-          error: health.wechaty !== "ready" ? `Wechaty status: ${health.wechaty}` : undefined,
+          ok: health.wechaty === 'ready' && health.loggedIn,
+          error: health.wechaty !== 'ready' ? `Wechaty status: ${health.wechaty}` : undefined,
           wcId: undefined, // 需要额外获取
           nickName: undefined,
         };
@@ -459,12 +506,12 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
 
       // If not logged in, perform QR code login
       if (!health.loggedIn) {
-        log?.info("Not logged in, starting QR code login flow");
+        log?.info('Not logged in, starting QR code login flow');
 
         const { qrCodeUrl } = await client.getQRCode();
 
         await displayQRCode(qrCodeUrl);
-        log?.info("Please scan the QR code with WeChat to login");
+        log?.info('Please scan the QR code with WeChat to login');
 
         // Poll for login status
         let loggedIn = false;
@@ -472,25 +519,25 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
 
         for (let i = 0; i < 60; i++) {
           if (abortSignal?.aborted) {
-            throw new Error("Login aborted");
+            throw new Error('Login aborted');
           }
 
           await new Promise((r) => setTimeout(r, 5000));
 
           const check = await client.checkLogin();
 
-          if (check.status === "logged_in") {
+          if (check.status === 'logged_in') {
             loggedIn = true;
             loginResult = check;
             break;
-          } else if (check.status === "need_verify") {
+          } else if (check.status === 'need_verify') {
             log?.warn(`Verification required: ${check.verifyUrl}`);
             console.log(`\n⚠️  需要辅助验证，请访问: ${check.verifyUrl}\n`);
           }
         }
 
         if (!loggedIn || !loginResult) {
-          throw new Error("Login timeout: QR code expired");
+          throw new Error('Login timeout: QR code expired');
         }
 
         displayLoginSuccess(loginResult.nickName, loginResult.wcId);
@@ -505,7 +552,7 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
         log?.info(`Already logged in`);
         // Try to get user info from status
         const status = await client.checkLogin();
-        if (status.status === "logged_in") {
+        if (status.status === 'logged_in') {
           account.wcId = status.wcId;
           account.nickName = status.nickName;
           account.isLoggedIn = true;
@@ -541,7 +588,7 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
         abortSignal,
       });
 
-      abortSignal?.addEventListener("abort", stop);
+      abortSignal?.addEventListener('abort', stop);
 
       log?.info(`WeChat account ${accountId} started successfully on port ${port}`);
       log?.info(`Webhook URL: ${webhookUrl}`);
@@ -565,13 +612,13 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
       });
 
       if (!account.wcId) {
-        throw new Error("Not logged in");
+        throw new Error('Not logged in');
       }
 
       const result = await client.sendText(to.id, text);
 
       return {
-        channel: "wechat",
+        channel: 'wechat',
         messageId: String(result.newMsgId),
         timestamp: result.createTime,
       };
@@ -585,7 +632,7 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
       });
 
       if (!account.wcId) {
-        throw new Error("Not logged in");
+        throw new Error('Not logged in');
       }
 
       // Send text first if provided
@@ -597,7 +644,7 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
       const result = await client.sendImage(to.id, mediaUrl);
 
       return {
-        channel: "wechat",
+        channel: 'wechat',
         messageId: String(result.newMsgId),
       };
     },

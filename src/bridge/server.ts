@@ -1,5 +1,7 @@
 import express from 'express';
 import { WechatyClient, MessagePayload } from './wechaty-client.js';
+import { logger } from '../utils/logger.js';
+import { metrics } from '../utils/metrics.js';
 
 export interface BridgeConfig {
   server: {
@@ -35,7 +37,23 @@ export class BridgeServer {
   private setupMiddleware(): void {
     this.app.use(express.json());
     this.app.use((req, res, next) => {
-      console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+      const start = Date.now();
+
+      logger.debug(`${req.method} ${req.path}`, {
+        ip: req.ip,
+        userAgent: req.get('user-agent'),
+      });
+
+      res.on('finish', () => {
+        const duration = Date.now() - start;
+        metrics.recordResponseTime(duration);
+
+        logger.debug(`${req.method} ${req.path} - ${res.statusCode} - ${duration}ms`, {
+          statusCode: res.statusCode,
+          duration,
+        });
+      });
+
       next();
     });
   }
@@ -43,7 +61,13 @@ export class BridgeServer {
   private setupRoutes(): void {
     // 健康检查
     this.app.get('/health', (req, res) => {
-      res.json({ status: 'ok', timestamp: Date.now() });
+      const status = this.client.getStatus();
+      res.json({
+        status: 'ok',
+        timestamp: Date.now(),
+        wechaty: status.isLoggedIn ? 'ready' : 'pending_login',
+        loggedIn: status.isLoggedIn,
+      });
     });
 
     // 账号状态
@@ -112,13 +136,29 @@ export class BridgeServer {
       }
     });
 
-    // 获取通讯录
+    // 获取通讯录（详细列表）
     this.app.post('/v1/getAddressList', async (req, res) => {
       try {
-        const contacts = await this.client.getContacts();
+        const { forceRefresh = false, includeMembers = false } = req.body;
+        const addressList = await this.client.getAddressList(forceRefresh);
+
+        // 如果请求包含群成员详情
+        let result: any = { ...addressList };
+        if (includeMembers) {
+          result.roomMembers = {};
+          for (const room of addressList.chatrooms) {
+            try {
+              result.roomMembers[room.id] = await this.client.getRoomMembers(room.id);
+            } catch (e) {
+              console.warn(`Failed to get members for room ${room.id}:`, (e as Error).message);
+              result.roomMembers[room.id] = [];
+            }
+          }
+        }
+
         res.json({
           code: '1000',
-          data: contacts,
+          data: result,
         });
       } catch (err: any) {
         res.status(500).json({
@@ -126,6 +166,43 @@ export class BridgeServer {
           message: err.message,
         });
       }
+    });
+
+    // 获取群成员列表
+    this.app.post('/v1/getRoomMembers', async (req, res) => {
+      try {
+        const { roomId } = req.body;
+        if (!roomId) {
+          res.status(400).json({
+            code: '400',
+            message: 'roomId is required',
+          });
+          return;
+        }
+
+        const members = await this.client.getRoomMembers(roomId);
+        res.json({
+          code: '1000',
+          data: {
+            roomId,
+            members,
+          },
+        });
+      } catch (err: any) {
+        res.status(500).json({
+          code: '500',
+          message: err.message,
+        });
+      }
+    });
+
+    // 清除联系人缓存
+    this.app.post('/v1/contacts/clearCache', (req, res) => {
+      this.client.clearContactsCache();
+      res.json({
+        code: '1000',
+        message: 'Contacts cache cleared successfully',
+      });
     });
 
     // 注册 Webhook
@@ -161,11 +238,20 @@ export class BridgeServer {
       });
     });
 
+    // 获取监控指标
+    this.app.get('/v1/metrics', (req, res) => {
+      const snapshot = metrics.getSnapshot();
+      res.json({
+        code: '1000',
+        data: snapshot,
+      });
+    });
+
     // 测试消息发送（仅用于开发测试）
     this.app.post('/v1/test/send-message', async (req, res) => {
       try {
         const { content, isGroup = false, withMention = false } = req.body;
-        
+
         // 构建测试消息
         const testMessage: MessagePayload = {
           id: `test-${Date.now()}`,
@@ -216,84 +302,123 @@ export class BridgeServer {
 
   private setupEventHandlers(): void {
     this.client.on('message', async (message: MessagePayload) => {
+      metrics.recordMessageReceived();
+
+      // Log the message for debugging
+      const msgType = message.group ? 'group' : 'private';
+      const sender = message.sender.name || message.sender.id;
+      const content = message.content.substring(0, 100);
+      logger.info(
+        `📨 Message received: ${message.type} from ${sender} in ${msgType}: "${content}"`
+      );
+
       if (this.webhookUrl) {
         try {
           await this.sendWebhookWithRetry(message);
         } catch (err) {
-          console.error('Failed to send webhook after retries:', err);
+          logger.error('Failed to send webhook after retries', err);
         }
+      } else {
+        logger.warn(`⚠️ Webhook not configured, message not forwarded to OpenClaw`);
       }
     });
 
     this.client.on('login', (data: { wcId: string; nickName: string }) => {
-      console.log(`Bridge: User logged in - ${data.nickName} (${data.wcId})`);
+      metrics.setConnectionStatus('connected');
+      logger.info(`User logged in - ${data.nickName} (${data.wcId})`);
     });
 
     this.client.on('logout', () => {
-      console.log('Bridge: User logged out');
+      metrics.setConnectionStatus('disconnected');
+      logger.info('User logged out');
     });
 
     this.client.on('error', (error: Error) => {
-      console.error('Bridge: Client error:', error);
+      logger.error('Client error', error);
     });
 
     // 重连相关事件
-    this.client.on('reconnecting', (data: { attempt: number; maxAttempts: number; delay: number }) => {
-      console.log(`Bridge: Reconnecting... Attempt ${data.attempt}/${data.maxAttempts} in ${Math.round(data.delay/1000)}s`);
-    });
+    this.client.on(
+      'reconnecting',
+      (data: { attempt: number; maxAttempts: number; delay: number }) => {
+        metrics.setConnectionStatus('reconnecting');
+        metrics.recordReconnectAttempt();
+        logger.warn(
+          `Reconnecting... Attempt ${data.attempt}/${data.maxAttempts} in ${Math.round(data.delay / 1000)}s`
+        );
+      }
+    );
 
     this.client.on('reconnected', () => {
-      console.log('Bridge: Reconnected successfully!');
+      metrics.setConnectionStatus('connected');
+      logger.info('Reconnected successfully!');
     });
 
     this.client.on('reconnectFailed', (data: { attempt: number; error: string }) => {
-      console.error(`Bridge: Reconnect attempt ${data.attempt} failed: ${data.error}`);
+      logger.error(`Reconnect attempt ${data.attempt} failed`, new Error(data.error));
     });
 
     this.client.on('reconnectExhausted', (data: { maxAttempts: number }) => {
-      console.error(`Bridge: Reconnect exhausted after ${data.maxAttempts} attempts`);
+      logger.error(`Reconnect exhausted after ${data.maxAttempts} attempts`);
     });
 
     // 心跳相关事件
     this.client.on('heartbeat', (data: { status: string; timestamp: number }) => {
-      console.log(`Bridge: Heartbeat OK at ${new Date(data.timestamp).toISOString()}`);
+      logger.debug(`Heartbeat OK at ${new Date(data.timestamp).toISOString()}`);
     });
 
     this.client.on('heartbeatFailed', (data: { missedCount: number }) => {
-      console.error(`Bridge: Heartbeat failed, missed ${data.missedCount} times`);
+      logger.error(`Heartbeat failed, missed ${data.missedCount} times`);
+    });
+
+    // 注册告警处理
+    metrics.onAlert((type, message, data) => {
+      logger.warn(`Alert triggered: ${type}`, { message, ...data });
     });
   }
 
-  private async sendWebhookWithRetry(message: MessagePayload, maxRetries: number = 3): Promise<void> {
+  private async sendWebhookWithRetry(
+    message: MessagePayload,
+    maxRetries: number = 3
+  ): Promise<void> {
     const payload = this.convertToWebhookFormat(message);
-    
+    const startTime = Date.now();
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         const response = await fetch(this.webhookUrl, {
           method: 'POST',
-          headers: { 
+          headers: {
             'Content-Type': 'application/json',
             'X-Webhook-Attempt': String(attempt),
           },
           body: JSON.stringify(payload),
         });
-        
+
         if (response.ok) {
-          console.log(`Webhook sent successfully: ${message.id} (attempt ${attempt})`);
+          const latency = Date.now() - startTime;
+          metrics.recordWebhookSent(latency);
+          logger.debug(
+            `Webhook sent successfully: ${message.id} (attempt ${attempt}, ${latency}ms)`
+          );
           return;
         } else {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
       } catch (err: any) {
-        console.error(`Webhook attempt ${attempt} failed:`, err.message);
-        
+        logger.warn(`Webhook attempt ${attempt} failed`, {
+          error: err.message,
+          messageId: message.id,
+        });
+
         if (attempt === maxRetries) {
+          metrics.recordWebhookFailed(err);
           throw new Error(`Failed after ${maxRetries} attempts: ${err.message}`);
         }
-        
+
         // 指数退避重试
         const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
   }
@@ -325,24 +450,45 @@ export class BridgeServer {
   }
 
   async start(): Promise<void> {
+    logger.info('Starting Bridge server...', {
+      host: this.config.server.host,
+      port: this.config.server.port,
+    });
+
     // Start HTTP server first
     const serverPromise = new Promise<void>((resolve) => {
       this.app.listen(this.config.server.port, this.config.server.host, () => {
-        console.log(`Bridge server listening on ${this.config.server.host}:${this.config.server.port}`);
+        logger.info(
+          `Bridge server listening on ${this.config.server.host}:${this.config.server.port}`
+        );
         resolve();
       });
     });
-    
+
     await serverPromise;
-    
+
+    // Auto-register webhook if configured
+    const webhookPort = parseInt(process.env.WEBHOOK_PORT || '18790');
+    const webhookPath = process.env.WEBHOOK_PATH || '/webhook/wechat';
+    const webhookHost = process.env.WEBHOOK_HOST || 'localhost';
+
+    // Check if we should auto-register webhook
+    if (process.env.AUTO_REGISTER_WEBHOOK === 'true') {
+      const webhookUrl = `http://${webhookHost}:${webhookPort}${webhookPath}`;
+      logger.info(`Auto-registering webhook: ${webhookUrl}`);
+      this.webhookUrl = webhookUrl;
+    }
+
     // Start Wechaty client in background (don't block)
     this.client.start().catch((err) => {
-      console.error('Wechaty client failed to start:', err);
+      logger.error('Wechaty client failed to start', err);
     });
   }
 
   async stop(): Promise<void> {
+    logger.info('Stopping Bridge server...');
     await this.client.stop();
+    logger.info('Bridge server stopped');
   }
 }
 
@@ -365,15 +511,21 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   };
 
   const server = new BridgeServer(config);
-  
+
   server.start().catch((err) => {
-    console.error('Failed to start server:', err);
+    logger.error('Failed to start server', err);
     process.exit(1);
   });
 
   // Graceful shutdown
   process.on('SIGINT', async () => {
-    console.log('\nShutting down...');
+    logger.info('Received SIGINT, shutting down gracefully...');
+    await server.stop();
+    process.exit(0);
+  });
+
+  process.on('SIGTERM', async () => {
+    logger.info('Received SIGTERM, shutting down gracefully...');
     await server.stop();
     process.exit(0);
   });

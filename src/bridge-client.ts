@@ -4,9 +4,9 @@ export interface BridgeClientConfig {
 }
 
 export type LoginStatus =
-  | { status: "waiting" }
-  | { status: "need_verify"; verifyUrl: string }
-  | { status: "logged_in"; wcId: string; nickName: string; headUrl?: string };
+  | { status: 'waiting' }
+  | { status: 'need_verify'; verifyUrl: string }
+  | { status: 'logged_in'; wcId: string; nickName: string; headUrl?: string };
 
 export class BridgeClient {
   private accountId: string;
@@ -15,20 +15,26 @@ export class BridgeClient {
   constructor(config: BridgeClientConfig) {
     this.accountId = config.accountId;
     if (!config.baseUrl) {
-      throw new Error("bridgeUrl is required. Please configure it with: openclaw config set channels.wechat.bridgeUrl \"http://localhost:3001\"");
+      throw new Error(
+        'bridgeUrl is required. Please configure it with: openclaw config set channels.wechat.bridgeUrl "http://localhost:3001"'
+      );
     }
-    this.baseUrl = config.baseUrl.replace(/\/$/, ""); // Remove trailing slash
+    this.baseUrl = config.baseUrl.replace(/\/$/, ''); // Remove trailing slash
   }
 
-  private async request(endpoint: string, data?: unknown, method: "GET" | "POST" = "POST"): Promise<Record<string, unknown>> {
+  private async request(
+    endpoint: string,
+    data?: unknown,
+    method: 'GET' | 'POST' = 'POST'
+  ): Promise<Record<string, unknown>> {
     const url = `${this.baseUrl}${endpoint}`;
     const response = await fetch(url, {
       method,
       headers: {
-        "Content-Type": "application/json",
-        "X-Account-ID": this.accountId,
+        'Content-Type': 'application/json',
+        'X-Account-ID': this.accountId,
       },
-      body: method === "POST" && data ? JSON.stringify(data) : undefined,
+      body: method === 'POST' && data ? JSON.stringify(data) : undefined,
     });
 
     const result = (await response.json().catch(() => ({
@@ -37,7 +43,11 @@ export class BridgeClient {
     }))) as Record<string, unknown>;
 
     if (!response.ok) {
-      throw new Error((result.error as string) || (result.message as string) || `Request failed: ${response.status}`);
+      throw new Error(
+        (result.error as string) ||
+          (result.message as string) ||
+          `Request failed: ${response.status}`
+      );
     }
 
     // Bridge 服务返回格式: { success: boolean, error?: string, ... }
@@ -55,7 +65,7 @@ export class BridgeClient {
     wechaty: string;
     loggedIn: boolean;
   }> {
-    const result = await this.request("/health", undefined, "GET") as {
+    const result = (await this.request('/health', undefined, 'GET')) as {
       status: string;
       wechaty: string;
       loggedIn: boolean;
@@ -74,8 +84,8 @@ export class BridgeClient {
   }> {
     try {
       const health = await this.healthCheck();
-      
-      if (health.wechaty === "ready" && health.loggedIn) {
+
+      if (health.wechaty === 'ready' && health.loggedIn) {
         // 如果 Wechaty 已就绪且已登录，需要获取用户信息
         // Bridge 的 /health 端点可能包含用户信息，或通过其他方式获取
         // 这里我们假设 health 端点返回 loggedIn 状态
@@ -106,25 +116,26 @@ export class BridgeClient {
     qrCodeUrl: string;
     wId: string;
   }> {
-    const result = await this.request("/v1/iPadLogin", {}) as {
+    const result = (await this.request('/v1/iPadLogin', {})) as {
       success: boolean;
+      qrCodeUrl?: string;
       qrCode?: string;
       error?: string;
     };
 
-    if (!result.success || !result.qrCode) {
-      throw new Error(result.error || "Failed to get QR code");
+    if (!result.success || !(result.qrCodeUrl || result.qrCode)) {
+      throw new Error(result.error || 'Failed to get QR code');
     }
 
     return {
-      wId: "wechaty", // Wechaty 不需要 wId，使用占位符
-      qrCodeUrl: result.qrCode,
+      wId: 'wechaty',
+      qrCodeUrl: result.qrCodeUrl || result.qrCode || '',
     };
   }
 
   async checkLogin(): Promise<LoginStatus> {
     try {
-      const result = await this.request("/v1/account/status", undefined, "GET") as {
+      const result = (await this.request('/v1/account/status', undefined, 'GET')) as {
         success: boolean;
         loggedIn: boolean;
         userInfo?: {
@@ -137,7 +148,7 @@ export class BridgeClient {
 
       if (result.success && result.loggedIn && result.userInfo) {
         return {
-          status: "logged_in",
+          status: 'logged_in',
           wcId: result.userInfo.id,
           nickName: result.userInfo.name,
           headUrl: result.userInfo.avatar,
@@ -146,60 +157,66 @@ export class BridgeClient {
 
       // 检查是否还在等待登录
       const health = await this.healthCheck();
-      if (health.wechaty === "pending_scan" || health.wechaty === "pending_login") {
-        return { status: "waiting" };
+      if (health.wechaty === 'pending_scan' || health.wechaty === 'pending_login') {
+        return { status: 'waiting' };
       }
 
-      return { status: "waiting" };
+      return { status: 'waiting' };
     } catch (error: any) {
-      return { status: "waiting" };
+      return { status: 'waiting' };
     }
   }
 
   // ===== Message Sending =====
 
-  async sendText(wcId: string, content: string): Promise<{
+  async sendText(
+    wcId: string,
+    content: string
+  ): Promise<{
     msgId: number;
     newMsgId: number;
     createTime: number;
   }> {
-    const result = await this.request("/v1/sendText", {
+    const result = (await this.request('/v1/sendText', {
       wcId,
       content,
-    }) as {
-      success: boolean;
-      messageId?: string;
-      error?: string;
+    })) as {
+      code?: string;
+      data?: {
+        msgId: number;
+        newMsgId: number;
+        createTime: number;
+      };
+      message?: string;
     };
 
-    if (!result.success) {
-      throw new Error(result.error || "Failed to send text message");
+    // Bridge 返回格式: { code: "1000", data: {...} }
+    if (result.code !== '1000' || !result.data) {
+      throw new Error(result.message || 'Failed to send text message');
     }
 
-    const now = Date.now();
-    return {
-      msgId: now,
-      newMsgId: now,
-      createTime: Math.floor(now / 1000),
-    };
+    return result.data;
   }
 
-  async sendImage(wcId: string, imageUrl: string): Promise<{
+  async sendImage(
+    wcId: string,
+    imageUrl: string
+  ): Promise<{
     msgId: number;
     newMsgId: number;
     createTime: number;
   }> {
-    const result = await this.request("/v1/sendImage2", {
+    const result = (await this.request('/v1/sendImage2', {
       wcId,
       imageUrl,
-    }) as {
+    })) as {
       success: boolean;
       messageId?: string;
       error?: string;
     };
 
     if (!result.success) {
-      throw new Error(result.error || "Failed to send image message");
+      throw new Error(result.error || 'Failed to send image message');
     }
 
     const now = Date.now();
@@ -216,12 +233,82 @@ export class BridgeClient {
     friends: string[];
     chatrooms: string[];
   }> {
-    // Bridge 服务当前版本可能不直接支持获取联系人列表
-    // 返回空数组作为占位
-    return {
-      friends: [],
-      chatrooms: [],
+    try {
+      const result = (await this.request('/v1/getAddressList', {})) as {
+        code: string;
+        data: {
+          friends: Array<{ id: string; name: string }>;
+          chatrooms: Array<{ id: string; name: string }>;
+        };
+      };
+
+      if (result.code !== '1000' || !result.data) {
+        return { friends: [], chatrooms: [] };
+      }
+
+      return {
+        friends: result.data.friends.map((f) => f.id),
+        chatrooms: result.data.chatrooms.map((r) => r.id),
+      };
+    } catch (error: any) {
+      console.warn('Failed to get contacts:', error.message);
+      return { friends: [], chatrooms: [] };
+    }
+  }
+
+  /**
+   * Get detailed address list with friend and room info
+   */
+  async getAddressList(forceRefresh: boolean = false): Promise<{
+    friends: Array<{ id: string; name: string; avatar?: string; alias?: string }>;
+    chatrooms: Array<{ id: string; name: string; memberCount?: number }>;
+    updateTime: number;
+  }> {
+    const result = (await this.request('/v1/getAddressList', { forceRefresh })) as {
+      code: string;
+      data: {
+        friends: Array<{ id: string; name: string; avatar?: string; alias?: string }>;
+        chatrooms: Array<{ id: string; name: string; memberCount?: number }>;
+        updateTime: number;
+      };
     };
+
+    if (result.code !== '1000') {
+      throw new Error('Failed to get address list');
+    }
+
+    return result.data;
+  }
+
+  /**
+   * Get room members
+   */
+  async getRoomMembers(roomId: string): Promise<
+    Array<{
+      id: string;
+      name: string;
+      avatar?: string;
+      roomAlias?: string;
+    }>
+  > {
+    const result = (await this.request('/v1/getRoomMembers', { roomId })) as {
+      code: string;
+      data: {
+        roomId: string;
+        members: Array<{
+          id: string;
+          name: string;
+          avatar?: string;
+          roomAlias?: string;
+        }>;
+      };
+    };
+
+    if (result.code !== '1000') {
+      throw new Error('Failed to get room members');
+    }
+
+    return result.data.members;
   }
 
   // ===== Webhook =====
@@ -231,15 +318,15 @@ export class BridgeClient {
    * Bridge will forward messages from Wechaty to this URL.
    */
   async registerWebhook(webhookUrl: string): Promise<void> {
-    const result = await this.request("/v1/webhook/register", {
+    const result = (await this.request('/v1/webhook/register', {
       webhookUrl,
-    }) as {
+    })) as {
       success: boolean;
       error?: string;
     };
 
     if (!result.success) {
-      throw new Error(result.error || "Failed to register webhook");
+      throw new Error(result.error || 'Failed to register webhook');
     }
   }
 
@@ -249,14 +336,14 @@ export class BridgeClient {
   async getWebhook(): Promise<{
     url: string | null;
   }> {
-    const result = await this.request("/v1/webhook/get", {}) as {
+    const result = (await this.request('/v1/webhook/get', {})) as {
       success: boolean;
       webhookUrl?: string | null;
       error?: string;
     };
 
     if (!result.success) {
-      throw new Error(result.error || "Failed to get webhook configuration");
+      throw new Error(result.error || 'Failed to get webhook configuration');
     }
 
     return {

@@ -4,6 +4,7 @@ import { EventEmitter } from 'events';
 import { MemoryCard } from 'memory-card';
 import * as fs from 'fs';
 import * as path from 'path';
+import { logger } from '../utils/logger.js';
 
 export interface MessagePayload {
   id: string;
@@ -13,8 +14,8 @@ export interface MessagePayload {
   content: string;
   timestamp: number;
   group?: { id: string; name: string };
-  mention?: string[];  // @提及的用户列表
-  isMentioned?: boolean;  // 是否@了机器人
+  mention?: string[]; // @提及的用户列表
+  isMentioned?: boolean; // 是否@了机器人
   raw: any;
 }
 
@@ -22,10 +23,39 @@ export interface WechatyClientConfig {
   name?: string;
   puppet?: string;
   puppetToken?: string;
-  memoryCardPath?: string;  // 会话存储路径
-  reconnectInterval?: number;  // 重连间隔基数（毫秒）
-  maxReconnectAttempts?: number;  // 最大重连次数
-  heartbeatInterval?: number;  // 心跳检测间隔（毫秒）
+  memoryCardPath?: string; // 会话存储路径
+  reconnectInterval?: number; // 重连间隔基数（毫秒）
+  maxReconnectAttempts?: number; // 最大重连次数
+  heartbeatInterval?: number; // 心跳检测间隔（毫秒）
+  contactsCacheTtl?: number; // 联系人缓存时间（毫秒，默认5分钟）
+}
+
+export interface ContactInfo {
+  id: string;
+  name: string;
+  avatar?: string;
+  alias?: string;
+  isFriend: boolean;
+}
+
+export interface RoomInfo {
+  id: string;
+  name: string;
+  memberCount?: number;
+  owner?: string;
+}
+
+export interface RoomMemberInfo {
+  id: string;
+  name: string;
+  avatar?: string;
+  roomAlias?: string;
+}
+
+export interface AddressList {
+  friends: ContactInfo[];
+  chatrooms: RoomInfo[];
+  updateTime: number;
 }
 
 export class WechatyClient extends EventEmitter {
@@ -36,21 +66,27 @@ export class WechatyClient extends EventEmitter {
   private nickName: string = '';
   private qrCodeUrl: string = '';
   private loginSessionId: string = '';
-  private processedMessages: Set<string> = new Set();  // 消息去重
-  private maxMessageHistory: number = 1000;  // 最大消息历史数量
+  private processedMessages: Set<string> = new Set(); // 消息去重
+  private maxMessageHistory: number = 1000; // 最大消息历史数量
   private memoryCard: MemoryCard | null = null;
   private memoryCardPath: string = '';
-  
+
   // 自动重连相关
   private reconnectAttempts: number = 0;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private isReconnecting: boolean = false;
-  
+
   // 心跳检测相关
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private lastHeartbeatTime: number = 0;
   private heartbeatMissedCount: number = 0;
   private maxMissedHeartbeats: number = 3;
+
+  // 联系人缓存
+  private contactsCache: AddressList | null = null;
+  private contactsCacheTime: number = 0;
+  private contactsCacheTtl: number = 5 * 60 * 1000; // 默认5分钟
+  private roomMembersCache: Map<string, RoomMemberInfo[]> = new Map();
 
   constructor(config: WechatyClientConfig = {}) {
     super();
@@ -59,20 +95,28 @@ export class WechatyClient extends EventEmitter {
       reconnectInterval: 5000,
       maxReconnectAttempts: 10,
       heartbeatInterval: 30000,
+      contactsCacheTtl: 5 * 60 * 1000,
       ...config,
     };
+    this.contactsCacheTtl = this.config.contactsCacheTtl || 5 * 60 * 1000;
     this.startCleanupTimer();
   }
 
   private startCleanupTimer(): void {
     // 每5分钟清理一次过期消息
-    setInterval(() => {
-      if (this.processedMessages.size > this.maxMessageHistory) {
-        const messagesToDelete = Array.from(this.processedMessages).slice(0, this.processedMessages.size - this.maxMessageHistory);
-        messagesToDelete.forEach(id => this.processedMessages.delete(id));
-        console.log(`Cleaned up ${messagesToDelete.length} old messages`);
-      }
-    }, 5 * 60 * 1000);
+    setInterval(
+      () => {
+        if (this.processedMessages.size > this.maxMessageHistory) {
+          const messagesToDelete = Array.from(this.processedMessages).slice(
+            0,
+            this.processedMessages.size - this.maxMessageHistory
+          );
+          messagesToDelete.forEach((id) => this.processedMessages.delete(id));
+          console.log(`Cleaned up ${messagesToDelete.length} old messages`);
+        }
+      },
+      5 * 60 * 1000
+    );
   }
 
   /**
@@ -85,15 +129,15 @@ export class WechatyClient extends EventEmitter {
       if (!fs.existsSync(dataDir)) {
         fs.mkdirSync(dataDir, { recursive: true });
       }
-      
+
       this.memoryCardPath = path.join(dataDir, `${this.config.name}.memory-card.json`);
       console.log(`MemoryCard path: ${this.memoryCardPath}`);
-      
+
       // 加载已有的会话数据
       this.memoryCard = new MemoryCard({
         name: this.config.name,
       });
-      
+
       if (fs.existsSync(this.memoryCardPath)) {
         console.log('Loading existing session from MemoryCard...');
         await this.memoryCard.load();
@@ -146,7 +190,7 @@ export class WechatyClient extends EventEmitter {
   async start(): Promise<void> {
     // 初始化 MemoryCard
     await this.initMemoryCard();
-    
+
     // 检查是否有可恢复的会话
     const hasSession = await this.restoreSession();
     if (hasSession) {
@@ -163,7 +207,7 @@ export class WechatyClient extends EventEmitter {
 
     this.setupEventHandlers();
     await this.bot.start();
-    
+
     // 启动心跳检测
     this.startHeartbeat();
   }
@@ -181,10 +225,10 @@ export class WechatyClient extends EventEmitter {
         this.isLoggedIn = true;
         this.wcId = user.id;
         this.nickName = user.name();
-        this.reconnectAttempts = 0;  // 重置重连计数
+        this.reconnectAttempts = 0; // 重置重连计数
         console.log(`User ${user.name()} logged in`);
         this.emit('login', { wcId: this.wcId, nickName: this.nickName });
-        
+
         // 保存会话到 MemoryCard
         this.saveSession();
       })
@@ -192,7 +236,7 @@ export class WechatyClient extends EventEmitter {
         this.isLoggedIn = false;
         console.log(`User ${user.name()} logged out`);
         this.emit('logout', user);
-        
+
         // 清除会话数据
         if (this.memoryCard) {
           this.memoryCard.delete('loginState');
@@ -205,9 +249,21 @@ export class WechatyClient extends EventEmitter {
       .on('error', (error: Error) => {
         console.error('Wechaty error:', error);
         this.emit('error', error);
-        
-        // 触发自动重连
-        this.handleDisconnect('error', error);
+
+        // 检查是否是暂时性错误，不触发断线
+        const errorMessage = error.message || '';
+        const isTemporaryError =
+          errorMessage.includes('1101') || // 暂时性错误
+          errorMessage.includes('1102') || // 暂时性错误
+          errorMessage.includes('400 != 400') || // 暂时性错误
+          errorMessage.includes('timeout'); // 超时错误
+
+        if (!isTemporaryError) {
+          console.log('[INFO] Non-temporary error, triggering reconnect...');
+          this.handleDisconnect('error', error);
+        } else {
+          console.log('[INFO] Temporary error, ignoring...');
+        }
       });
   }
 
@@ -229,21 +285,23 @@ export class WechatyClient extends EventEmitter {
    */
   private async reconnect(): Promise<void> {
     const maxAttempts = this.config.maxReconnectAttempts || 10;
-    
+
     while (this.reconnectAttempts < maxAttempts) {
       this.reconnectAttempts++;
-      
+
       // 计算退避延迟（指数退避，最大60秒）
       const baseDelay = this.config.reconnectInterval || 5000;
       const delay = Math.min(baseDelay * Math.pow(1.5, this.reconnectAttempts - 1), 60000);
-      
-      console.log(`Reconnect attempt ${this.reconnectAttempts}/${maxAttempts} in ${Math.round(delay/1000)}s...`);
+
+      console.log(
+        `Reconnect attempt ${this.reconnectAttempts}/${maxAttempts} in ${Math.round(delay / 1000)}s...`
+      );
       this.emit('reconnecting', { attempt: this.reconnectAttempts, maxAttempts, delay });
-      
-      await new Promise(resolve => {
+
+      await new Promise((resolve) => {
         this.reconnectTimer = setTimeout(resolve, delay);
       });
-      
+
       try {
         // 尝试停止当前连接
         try {
@@ -251,11 +309,11 @@ export class WechatyClient extends EventEmitter {
         } catch (e) {
           // 忽略停止错误
         }
-        
+
         // 重新启动
         console.log('Restarting Wechaty client...');
         await this.bot.start();
-        
+
         console.log('Reconnected successfully!');
         this.isReconnecting = false;
         this.reconnectAttempts = 0;
@@ -266,7 +324,7 @@ export class WechatyClient extends EventEmitter {
         this.emit('reconnectFailed', { attempt: this.reconnectAttempts, error: error.message });
       }
     }
-    
+
     // 超过最大重连次数
     console.error(`Failed to reconnect after ${maxAttempts} attempts`);
     this.isReconnecting = false;
@@ -280,10 +338,10 @@ export class WechatyClient extends EventEmitter {
     if (this.heartbeatTimer) {
       clearInterval(this.heartbeatTimer);
     }
-    
+
     const interval = this.config.heartbeatInterval || 30000;
     console.log(`Starting heartbeat check every ${interval}ms`);
-    
+
     this.heartbeatTimer = setInterval(() => {
       this.checkHeartbeat();
     }, interval);
@@ -296,14 +354,16 @@ export class WechatyClient extends EventEmitter {
     try {
       // 检查 Wechaty 状态
       const isLoggedIn = this.bot?.isLoggedIn;
-      
+
       if (this.isLoggedIn !== isLoggedIn) {
-        console.warn(`Heartbeat: Login state mismatch detected. Expected: ${this.isLoggedIn}, Actual: ${isLoggedIn}`);
+        console.warn(
+          `Heartbeat: Login state mismatch detected. Expected: ${this.isLoggedIn}, Actual: ${isLoggedIn}`
+        );
         this.heartbeatMissedCount++;
       } else if (this.isLoggedIn) {
         // 登录状态下，检查是否能获取用户信息
         try {
-          const user = this.bot.userSelf();
+          const user = this.bot.currentUser;
           if (user) {
             this.heartbeatMissedCount = 0;
             this.lastHeartbeatTime = Date.now();
@@ -311,7 +371,7 @@ export class WechatyClient extends EventEmitter {
             return;
           }
         } catch (e) {
-          console.warn('Heartbeat: Failed to get user info');
+          logger.warn('Heartbeat: Failed to get user info');
           this.heartbeatMissedCount++;
         }
       } else {
@@ -319,10 +379,12 @@ export class WechatyClient extends EventEmitter {
         this.heartbeatMissedCount = 0;
         return;
       }
-      
+
       // 如果连续多次心跳失败，触发重连
       if (this.heartbeatMissedCount >= this.maxMissedHeartbeats) {
-        console.error(`Heartbeat: Missed ${this.heartbeatMissedCount} heartbeats, triggering reconnect`);
+        console.error(
+          `Heartbeat: Missed ${this.heartbeatMissedCount} heartbeats, triggering reconnect`
+        );
         this.emit('heartbeatFailed', { missedCount: this.heartbeatMissedCount });
         this.handleDisconnect('heartbeat');
       }
@@ -402,16 +464,16 @@ export class WechatyClient extends EventEmitter {
       if (room) {
         payload.group = {
           id: room.id,
-          name: await room.topic() || room.id,
+          name: (await room.topic()) || room.id,
         };
 
         // 处理@提及
         try {
           const mentionList = await message.mentionList();
           if (mentionList && mentionList.length > 0) {
-            payload.mention = mentionList.map(m => m.id);
+            payload.mention = mentionList.map((m) => m.id);
             // 检查是否@了机器人自己
-            payload.isMentioned = mentionList.some(m => m.id === this.wcId);
+            payload.isMentioned = mentionList.some((m) => m.id === this.wcId);
           }
         } catch (e) {
           // 获取@列表失败，继续处理
@@ -424,7 +486,9 @@ export class WechatyClient extends EventEmitter {
         return;
       }
 
-      console.log(`Received message: ${payload.type} from ${payload.sender.name} in ${payload.group ? 'group' : 'private'}`);
+      console.log(
+        `Received message: ${payload.type} from ${payload.sender.name} in ${payload.group ? 'group' : 'private'}`
+      );
       this.emit('message', payload);
     } catch (error: any) {
       console.error('Error handling message:', error.message);
@@ -433,21 +497,25 @@ export class WechatyClient extends EventEmitter {
 
   private mapMessageType(type: any): MessagePayload['type'] {
     const typeMap: Record<number, MessagePayload['type']> = {
-      7: 'text',    // MessageType.Text
-      3: 'image',   // MessageType.Image
-      6: 'file',    // MessageType.Attachment
+      7: 'text', // MessageType.Text
+      3: 'image', // MessageType.Image
+      6: 'file', // MessageType.Attachment
     };
     return typeMap[type] || 'unknown';
   }
 
   async sendText(to: string, content: string): Promise<any> {
-    if (!this.isLoggedIn) {
+    console.log('[DEBUG sendText] bot exists:', !!this.bot);
+    console.log('[DEBUG sendText] bot.isLoggedIn:', this.bot?.isLoggedIn);
+    console.log('[DEBUG sendText] this.isLoggedIn:', this.isLoggedIn);
+
+    if (!this.bot?.isLoggedIn) {
       throw new Error('Not logged in');
     }
 
     // 先尝试作为联系人查找
     let target: Contact | Room | null = await this.bot.Contact.find({ id: to });
-    
+
     // 如果没找到，尝试作为群查找
     if (!target && to.includes('@chatroom')) {
       target = await this.bot.Room.find({ id: to });
@@ -474,7 +542,7 @@ export class WechatyClient extends EventEmitter {
     try {
       // 查找目标
       let target: Contact | Room | null = await this.bot.Contact.find({ id: to });
-      
+
       if (!target && to.includes('@chatroom')) {
         target = await this.bot.Room.find({ id: to });
       }
@@ -485,11 +553,11 @@ export class WechatyClient extends EventEmitter {
 
       // 从 URL 创建 FileBox
       const fileBox = FileBox.fromUrl(imageUrl);
-      
+
       // 发送图片
       const msg = await target.say(fileBox);
       const msgId = (msg as any)?.id || Date.now();
-      
+
       return {
         msgId,
         newMsgId: msgId,
@@ -502,17 +570,183 @@ export class WechatyClient extends EventEmitter {
   }
 
   async getContacts(): Promise<{ friends: string[]; chatrooms: string[] }> {
+    const addressList = await this.getAddressList();
+    return {
+      friends: addressList.friends.map((f) => f.id),
+      chatrooms: addressList.chatrooms.map((r) => r.id),
+    };
+  }
+
+  /**
+   * 获取详细通讯录信息（带缓存）
+   */
+  async getAddressList(forceRefresh: boolean = false): Promise<AddressList> {
     if (!this.isLoggedIn) {
       throw new Error('Not logged in');
     }
 
-    const contacts = await this.bot.Contact.findAll();
-    const rooms = await this.bot.Room.findAll();
+    // 检查缓存是否有效
+    const now = Date.now();
+    if (
+      !forceRefresh &&
+      this.contactsCache &&
+      now - this.contactsCacheTime < this.contactsCacheTtl
+    ) {
+      console.log(
+        `Returning cached address list (${this.contactsCache.friends.length} friends, ${this.contactsCache.chatrooms.length} rooms)`
+      );
+      return this.contactsCache;
+    }
 
-    return {
-      friends: contacts.map((c: Contact) => c.id),
-      chatrooms: rooms.map((r: Room) => r.id),
-    };
+    console.log('Fetching address list from WeChat...');
+
+    try {
+      // 获取所有联系人
+      const contacts = await this.bot.Contact.findAll();
+      const friends: ContactInfo[] = [];
+
+      for (const contact of contacts) {
+        try {
+          // 只保留好友（不是公众号等）
+          if (contact.friend()) {
+            friends.push({
+              id: contact.id,
+              name: contact.name() || contact.id,
+              alias: contact.alias() || undefined,
+              avatar: await this.getContactAvatar(contact),
+              isFriend: true,
+            });
+          }
+        } catch (e) {
+          // 跳过无法获取的联系人
+          console.warn(`Failed to get contact info for ${contact.id}:`, (e as Error).message);
+        }
+      }
+
+      // 获取所有群
+      const rooms = await this.bot.Room.findAll();
+      const chatrooms: RoomInfo[] = [];
+
+      for (const room of rooms) {
+        try {
+          const topic = await room.topic();
+          const owner = await room.owner();
+
+          chatrooms.push({
+            id: room.id,
+            name: topic || room.id,
+            memberCount: await this.getRoomMemberCount(room),
+            owner: owner?.id,
+          });
+        } catch (e) {
+          console.warn(`Failed to get room info for ${room.id}:`, (e as Error).message);
+        }
+      }
+
+      // 更新缓存
+      this.contactsCache = {
+        friends,
+        chatrooms,
+        updateTime: now,
+      };
+      this.contactsCacheTime = now;
+
+      console.log(`Address list updated: ${friends.length} friends, ${chatrooms.length} rooms`);
+
+      return this.contactsCache;
+    } catch (error: any) {
+      console.error('Failed to fetch address list:', error.message);
+      // 如果有缓存，返回缓存数据（即使已过期）
+      if (this.contactsCache) {
+        console.log('Returning stale cache due to error');
+        return this.contactsCache;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * 获取群成员列表
+   */
+  async getRoomMembers(roomId: string): Promise<RoomMemberInfo[]> {
+    if (!this.isLoggedIn) {
+      throw new Error('Not logged in');
+    }
+
+    // 检查缓存
+    const cached = this.roomMembersCache.get(roomId);
+    if (cached && Date.now() - this.contactsCacheTime < this.contactsCacheTtl) {
+      return cached;
+    }
+
+    const room = await this.bot.Room.find({ id: roomId });
+    if (!room) {
+      throw new Error(`Room ${roomId} not found`);
+    }
+
+    try {
+      const members = await room.memberAll();
+      const memberList: RoomMemberInfo[] = [];
+
+      for (const member of members) {
+        try {
+          const alias = await room.alias(member);
+          memberList.push({
+            id: member.id,
+            name: member.name() || member.id,
+            avatar: await this.getContactAvatar(member),
+            roomAlias: alias || undefined,
+          });
+        } catch (e) {
+          console.warn(`Failed to get member info for ${member.id}:`, (e as Error).message);
+        }
+      }
+
+      // 更新缓存
+      this.roomMembersCache.set(roomId, memberList);
+      return memberList;
+    } catch (error: any) {
+      console.error(`Failed to get room members for ${roomId}:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 清除联系人缓存
+   */
+  clearContactsCache(): void {
+    this.contactsCache = null;
+    this.contactsCacheTime = 0;
+    this.roomMembersCache.clear();
+    console.log('Contacts cache cleared');
+  }
+
+  /**
+   * 获取联系人头像URL
+   */
+  private async getContactAvatar(contact: Contact): Promise<string | undefined> {
+    try {
+      // 尝试获取头像
+      const avatar = await contact.avatar();
+      if (avatar) {
+        return await avatar.toBase64();
+      }
+    } catch (e) {
+      // 头像获取失败，忽略
+    }
+    return undefined;
+  }
+
+  /**
+   * 获取群成员数量
+   */
+  private async getRoomMemberCount(room: Room): Promise<number | undefined> {
+    try {
+      const members = await room.memberAll();
+      return members.length;
+    } catch (e) {
+      return undefined;
+    }
   }
 
   getStatus() {
