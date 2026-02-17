@@ -30,12 +30,12 @@
     "claude"
   ],
   "openclaw": {
-    "id": "wechat",
+    "id": "openclaw-wechat",
     "extensions": [
       "./index.ts"
     ],
     "channel": {
-      "id": "wechat",
+      "id": "openclaw-wechat",
       "label": "WeChat",
       "selectionLabel": "WeChat (微信)",
       "docsPath": "/channels/wechat",

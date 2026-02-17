@@ -1,7 +1,13 @@
 import express from 'express';
+import * as fs from 'fs';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
 import { WechatyClient, MessagePayload } from './wechaty-client.js';
 import { logger } from '../utils/logger.js';
 import { metrics } from '../utils/metrics.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const WEBHOOK_CONFIG_FILE = path.resolve(__dirname, '../../data/webhook.json');
 
 export interface BridgeConfig {
   server: {
@@ -32,6 +38,37 @@ export class BridgeServer {
     this.setupMiddleware();
     this.setupRoutes();
     this.setupEventHandlers();
+    this.loadWebhookUrl();
+  }
+
+  private loadWebhookUrl(): void {
+    try {
+      if (fs.existsSync(WEBHOOK_CONFIG_FILE)) {
+        const data = JSON.parse(fs.readFileSync(WEBHOOK_CONFIG_FILE, 'utf-8'));
+        if (data.webhookUrl) {
+          this.webhookUrl = data.webhookUrl;
+          logger.info(`Restored webhook URL from config: ${this.webhookUrl}`);
+        }
+      }
+    } catch (error) {
+      logger.warn('Failed to load webhook config:', error);
+    }
+  }
+
+  private saveWebhookUrl(): void {
+    try {
+      const dataDir = path.dirname(WEBHOOK_CONFIG_FILE);
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+      }
+      fs.writeFileSync(
+        WEBHOOK_CONFIG_FILE,
+        JSON.stringify({ webhookUrl: this.webhookUrl }, null, 2)
+      );
+      logger.info(`Saved webhook URL to config: ${this.webhookUrl}`);
+    } catch (error) {
+      logger.error('Failed to save webhook config:', error);
+    }
   }
 
   private setupMiddleware(): void {
@@ -225,6 +262,7 @@ export class BridgeServer {
     this.app.post('/v1/webhook/register', (req, res) => {
       this.webhookUrl = req.body.webhookUrl;
       console.log(`Webhook registered: ${this.webhookUrl}`);
+      this.saveWebhookUrl();
       res.json({ success: true, webhookUrl: this.webhookUrl });
     });
 
@@ -493,6 +531,7 @@ export class BridgeServer {
       const webhookUrl = `http://${webhookHost}:${webhookPort}${webhookPath}`;
       logger.info(`Auto-registering webhook: ${webhookUrl}`);
       this.webhookUrl = webhookUrl;
+      this.saveWebhookUrl();
     }
 
     // Start Wechaty client in background (don't block)

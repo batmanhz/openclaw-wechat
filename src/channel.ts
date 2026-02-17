@@ -15,7 +15,7 @@ const DEFAULT_WEBHOOK_PORT = 18790;
 const DEFAULT_WEBHOOK_PATH = '/webhook/wechat';
 
 const PLUGIN_META = {
-  id: 'wechat',
+  id: 'openclaw-wechat',
   label: 'WeChat',
   selectionLabel: 'WeChat (微信) - 本地部署',
   docsPath: '/channels/wechat',
@@ -36,7 +36,7 @@ async function resolveWeChatAccount({
   accountId: string;
 }): Promise<ResolvedWeChatAccount> {
   console.log('[DEBUG] resolveWeChatAccount called, cfg.channels:', JSON.stringify(cfg.channels));
-  const wechatCfg = cfg.channels?.wechat as WechatConfig | undefined;
+  const wechatCfg = cfg.channels?.['openclaw-wechat'] as WechatConfig | undefined;
   console.log('[DEBUG] wechatCfg:', JSON.stringify(wechatCfg));
   const isDefault = accountId === DEFAULT_ACCOUNT_ID;
 
@@ -99,7 +99,7 @@ async function resolveWeChatAccount({
  * 支持简化配置和多账号配置
  */
 function listWeChatAccountIds(cfg: ClawdbotConfig): string[] {
-  const wechatCfg = cfg.channels?.wechat as WechatConfig | undefined;
+  const wechatCfg = cfg.channels?.['openclaw-wechat'] as WechatConfig | undefined;
 
   // 如果有顶级 bridgeUrl，则使用默认账号
   if (wechatCfg?.bridgeUrl) {
@@ -114,7 +114,7 @@ function listWeChatAccountIds(cfg: ClawdbotConfig): string[] {
 }
 
 export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
-  id: 'wechat',
+  id: 'openclaw-wechat',
 
   meta: PLUGIN_META,
 
@@ -163,7 +163,7 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
     },
 
     setAccountEnabled: ({ cfg, accountId, enabled }) => {
-      const wechatCfg = cfg.channels?.wechat as WechatConfig | undefined;
+      const wechatCfg = cfg.channels?.['openclaw-wechat'] as WechatConfig | undefined;
       const isDefault = accountId === DEFAULT_ACCOUNT_ID;
 
       if (isDefault) {
@@ -204,7 +204,7 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
     },
 
     deleteAccount: ({ cfg, accountId }) => {
-      const wechatCfg = cfg.channels?.wechat as WechatConfig | undefined;
+      const wechatCfg = cfg.channels?.['openclaw-wechat'] as WechatConfig | undefined;
       const isDefault = accountId === DEFAULT_ACCOUNT_ID;
 
       if (isDefault) {
@@ -268,7 +268,7 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
     resolveAccountId: () => DEFAULT_ACCOUNT_ID,
 
     applyAccountConfig: ({ cfg, accountId }) => {
-      const wechatCfg = cfg.channels?.wechat as WechatConfig | undefined;
+      const wechatCfg = cfg.channels?.['openclaw-wechat'] as WechatConfig | undefined;
       const isDefault = !accountId || accountId === DEFAULT_ACCOUNT_ID;
 
       if (isDefault) {

@@ -1,6 +1,6 @@
 {
-  "id": "wechat",
-  "channels": ["wechat"],
+  "id": "openclaw-wechat",
+  "channels": ["openclaw-wechat"],
   "configSchema": {
     "type": "object",
     "additionalProperties": true,

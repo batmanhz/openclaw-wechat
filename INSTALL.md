@@ -9,7 +9,22 @@
 
 ## 📦 安装步骤
 
-### 1. 安装插件
+### 1. 自动安装（推荐）
+
+使用提供的安装脚本自动完成插件安装、文件复制和依赖配置：
+
+```bash
+chmod +x install-plugin.sh
+./install-plugin.sh
+```
+
+脚本执行完成后，请直接跳转到 **"步骤 3. 配置 OpenClaw"**。
+
+### 2. 手动安装（备选）
+
+如果自动脚本执行失败，请按照以下步骤手动安装：
+
+#### 2.1 安装插件
 
 在 OpenClaw 中安装此插件：
 
@@ -23,7 +38,7 @@ openclaw plugins install /path/to/openclaw-wechat
 openclaw plugins install /mnt/d/works/openclaw-wechat
 ```
 
-### 2. 手动复制必要文件
+#### 2.2 手动复制必要文件
 
 **注意**：由于 OpenClaw 插件安装机制的当前限制，部分文件不会被自动复制，需要手动处理。
 
@@ -53,7 +68,7 @@ cp /path/to/openclaw-wechat/openclaw.plugin.json $EXTENSION_DIR/
 cp /path/to/openclaw-wechat/.env.example $EXTENSION_DIR/
 ```
 
-### 3. 安装依赖
+#### 2.3 安装依赖
 
 在扩展目录安装 npm 依赖：
 
@@ -62,7 +77,7 @@ cd ~/.openclaw/extensions/openclaw-wechat
 npm install
 ```
 
-### 4. 配置 OpenClaw
+### 3. 配置 OpenClaw
 
 启用并配置 WeChat 渠道：
 
@@ -95,13 +110,13 @@ openclaw config set channels.wechat.webhookPath "/webhook/wechat"
 }
 ```
 
-### 5. 重启 OpenClaw Gateway
+### 4. 重启 OpenClaw Gateway
 
 ```bash
 openclaw gateway restart
 ```
 
-### 6. 启动 Bridge 服务
+### 5. 启动 Bridge 服务
 
 ```bash
 # 进入插件目录

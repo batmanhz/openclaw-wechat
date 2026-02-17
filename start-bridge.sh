@@ -84,7 +84,8 @@ start_bridge() {
     echo "Press Ctrl+C to stop"
     echo ""
 
-    npm run start:bridge
+    # 使用本地 node_modules 中的 tsx
+    ./node_modules/.bin/tsx src/bridge/server.ts
 }
 
 # 主流程
