@@ -91,6 +91,22 @@ export class BridgeServer {
       });
     });
 
+    // 强制退出登录（清除会话，可用于换账号登录）
+    this.app.post('/v1/logout', async (req, res) => {
+      try {
+        await this.client.logout();
+        res.json({
+          code: '1000',
+          message: 'Logged out successfully, you can now scan QR code with a new account',
+        });
+      } catch (err: any) {
+        res.status(500).json({
+          code: '500',
+          message: err.message,
+        });
+      }
+    });
+
     // 检查登录状态
     this.app.post('/v1/getIPadLoginInfo', (req, res) => {
       const status = this.client.getStatus();

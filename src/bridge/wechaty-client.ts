@@ -250,15 +250,25 @@ export class WechatyClient extends EventEmitter {
         console.error('Wechaty error:', error);
         this.emit('error', error);
 
-        // 检查是否是暂时性错误，不触发断线
         const errorMessage = error.message || '';
-        const isTemporaryError =
-          errorMessage.includes('1101') || // 暂时性错误
-          errorMessage.includes('1102') || // 暂时性错误
-          errorMessage.includes('400 != 400') || // 暂时性错误
-          errorMessage.includes('timeout'); // 超时错误
+        const errorStack = error.stack || '';
 
-        if (!isTemporaryError) {
+        const isTemporaryError =
+          errorMessage.includes('1101') ||
+          errorMessage.includes('1102') ||
+          errorMessage.includes('400 != 400') ||
+          errorMessage.includes('timeout') ||
+          errorMessage.includes('AggregateError') ||
+          errorMessage.includes('ECONNREFUSED') ||
+          errorMessage.includes('socket') ||
+          errorStack.includes('axios') ||
+          errorStack.includes('fetch');
+
+        const isLogoutError = errorMessage.includes('already logout');
+
+        if (isLogoutError) {
+          console.log('[INFO] Logout detected, waiting for new login...');
+        } else if (!isTemporaryError) {
           console.log('[INFO] Non-temporary error, triggering reconnect...');
           this.handleDisconnect('error', error);
         } else {
@@ -767,5 +777,43 @@ export class WechatyClient extends EventEmitter {
       this.reconnectTimer = null;
     }
     await this.bot.stop();
+  }
+
+  async logout(): Promise<void> {
+    console.log('Forcing logout...');
+    this.isLoggedIn = false;
+    this.wcId = '';
+    this.nickName = '';
+    this.qrCodeUrl = '';
+    this.reconnectAttempts = 0;
+    this.isReconnecting = false;
+
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
+    this.stopHeartbeat();
+
+    if (this.memoryCard) {
+      try {
+        const mcPath = path.join(process.cwd(), `${this.config.name}.memory-card.json`);
+        if (fs.existsSync(mcPath)) {
+          fs.unlinkSync(mcPath);
+          console.log('Session file deleted');
+        }
+      } catch (e) {
+        console.log('Failed to clear session:', (e as Error).message);
+      }
+    }
+
+    try {
+      await this.bot.stop();
+    } catch (e) {
+      console.log('Bot already stopped or not running');
+    }
+
+    console.log('Logout complete. Please restart bridge to login with new account.');
+    this.emit('logout', null);
   }
 }

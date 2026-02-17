@@ -11,6 +11,7 @@ WeChat (微信) channel plugin for [OpenClaw](https://github.com/openclaw/opencl
 ### Overview
 
 This plugin integrates WeChat with OpenClaw using the Wechaty framework, enabling:
+
 - **Fully local deployment** - No third-party proxy services required
 - **Data privacy** - All messages processed locally
 - **Cost reduction** - No API Key or service fees
@@ -111,16 +112,16 @@ wechaty-bridge start
 channels:
   wechat:
     enabled: true
-    bridgeUrl: "http://localhost:3001"    # Required - Bridge service URL
-    
+    bridgeUrl: 'http://localhost:3001' # Required - Bridge service URL
+
     # Webhook configuration (optional for local, required for cloud)
     # Default: localhost - no need to change for local deployment
-    webhookHost: "localhost"              # Default: localhost
-    webhookPort: 18790                    # Default: 18790
-    webhookPath: "/webhook/wechat"        # Default: /webhook/wechat
+    webhookHost: 'localhost' # Default: localhost
+    webhookPort: 18790 # Default: 18790
+    webhookPath: '/webhook/wechat' # Default: /webhook/wechat
 
     # Puppet configuration (optional)
-    puppet: "wechaty-puppet-wechat"       # Default: wechaty-puppet-wechat
+    puppet: 'wechaty-puppet-wechat' # Default: wechaty-puppet-wechat
     # puppetToken: ""                     # Required for padlocal protocol
 ```
 
@@ -151,11 +152,11 @@ openclaw gateway start
 
 **We recommend using a secondary/spare WeChat account for testing:**
 
-| Risk | Description | Recommendation |
-|------|-------------|----------------|
-| Account ban | WeChat may detect automation | Use a spare account to protect your main account |
-| Message limits | Frequent messaging may trigger limits | Use for testing first |
-| Easy replacement | If banned, easily switch accounts | Register a backup account |
+| Risk             | Description                           | Recommendation                                   |
+| ---------------- | ------------------------------------- | ------------------------------------------------ |
+| Account ban      | WeChat may detect automation          | Use a spare account to protect your main account |
+| Message limits   | Frequent messaging may trigger limits | Use for testing first                            |
+| Easy replacement | If banned, easily switch accounts     | Register a backup account                        |
 
 **How to get a secondary account:**
 
@@ -164,7 +165,7 @@ openclaw gateway start
 - Use a spare phone number
 - Complete real-name verification (optional but recommended)
 
-# Option 2: Use an old unused account  
+# Option 2: Use an old unused account
 - Family member's spare account
 - Old phone number's WeChat account
 ```
@@ -196,7 +197,17 @@ After first login, your session is automatically saved:
 - Session stored in local file (`./wechaty-session.json`)
 - Auto-reconnect after service restart
 - No need to scan QR code every time
-- To logout manually: delete the session file
+- To logout manually: call `POST /v1/logout` API
+
+#### Switch Account
+
+To switch to a different WeChat account:
+
+```bash
+curl -X POST http://localhost:3001/v1/logout
+```
+
+This will clear the session and stop the bot. Then restart bridge to scan QR code with a new account.
 
 #### Important Notes
 
@@ -246,10 +257,10 @@ channels:
   wechat:
     accounts:
       work:
-        bridgeUrl: "http://localhost:3001"
+        bridgeUrl: 'http://localhost:3001'
         enabled: true
       personal:
-        bridgeUrl: "http://localhost:3002"
+        bridgeUrl: 'http://localhost:3002'
         enabled: true
 ```
 
@@ -270,6 +281,7 @@ openclaw config set channels.wechat.puppetToken "your-padlocal-token"
 ### 概述
 
 本插件使用 Wechaty 框架将微信集成到 OpenClaw，实现：
+
 - **完全本地部署** - 无需第三方代理服务
 - **数据隐私保护** - 所有消息本地处理
 - **零成本运行** - 无需 API Key 或服务费用
@@ -370,16 +382,16 @@ wechaty-bridge start
 channels:
   wechat:
     enabled: true
-    bridgeUrl: "http://localhost:3001"    # 必填 - Bridge 服务地址
-    
+    bridgeUrl: 'http://localhost:3001' # 必填 - Bridge 服务地址
+
     # Webhook 配置（本地部署可选，云部署必填）
     # 默认值: localhost - 本地部署无需修改
-    webhookHost: "localhost"              # 默认: localhost
-    webhookPort: 18790                    # 默认: 18790
-    webhookPath: "/webhook/wechat"        # 默认: /webhook/wechat
+    webhookHost: 'localhost' # 默认: localhost
+    webhookPort: 18790 # 默认: 18790
+    webhookPath: '/webhook/wechat' # 默认: /webhook/wechat
 
     # Puppet 配置（可选）
-    puppet: "wechaty-puppet-wechat"       # 默认: wechaty-puppet-wechat
+    puppet: 'wechaty-puppet-wechat' # 默认: wechaty-puppet-wechat
     # puppetToken: ""                     # 使用 padlocal 协议时需要
 ```
 
@@ -410,11 +422,11 @@ openclaw gateway start
 
 **我们强烈建议使用小号进行测试：**
 
-| 风险 | 说明 | 建议 |
-|------|------|------|
+| 风险     | 说明                     | 建议                   |
+| -------- | ------------------------ | ---------------------- |
 | 封号风险 | 微信可能检测到自动化行为 | 用小号避免主号受到影响 |
-| 消息限制 | 频繁发消息可能触发限制 | 先用小号测试 |
-| 易于更换 | 如被封可随时换号 | 提前注册备用号 |
+| 消息限制 | 频繁发消息可能触发限制   | 先用小号测试           |
+| 易于更换 | 如被封可随时换号         | 提前注册备用号         |
 
 **如何获取小号：**
 
@@ -505,10 +517,10 @@ channels:
   wechat:
     accounts:
       work:
-        bridgeUrl: "http://localhost:3001"
+        bridgeUrl: 'http://localhost:3001'
         enabled: true
       personal:
-        bridgeUrl: "http://localhost:3002"
+        bridgeUrl: 'http://localhost:3002'
         enabled: true
 ```
 

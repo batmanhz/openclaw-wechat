@@ -23,38 +23,48 @@ openclaw plugins install /path/to/openclaw-wechat
 openclaw plugins install /mnt/d/works/openclaw-wechat
 ```
 
-### 2. 安装依赖
+### 2. 手动复制必要文件
 
-安装完成后，需要在扩展目录手动安装依赖：
+**注意**：由于 OpenClaw 插件安装机制的当前限制，部分文件不会被自动复制，需要手动处理。
+
+安装后检查必要文件：
+
+```bash
+ls ~/.openclaw/extensions/openclaw-wechat/
+```
+
+如果缺少以下文件，需要手动复制：
+
+```bash
+# 假设你的项目在 /path/to/openclaw-wechat
+EXTENSION_DIR=~/.openclaw/extensions/openclaw-wechat
+
+# 复制源代码目录
+cp -r /path/to/openclaw-wechat/src $EXTENSION_DIR/
+
+# 复制配置文件
+cp /path/to/openclaw-wechat/package.json $EXTENSION_DIR/
+cp /path/to/openclaw-wechat/tsconfig.json $EXTENSION_DIR/
+cp /path/to/openclaw-wechat/start-bridge.sh $EXTENSION_DIR/
+cp /path/to/openclaw-wechat/setup.sh $EXTENSION_DIR/
+cp /path/to/openclaw-wechat/openclaw.plugin.json $EXTENSION_DIR/
+
+# 复制环境变量文件（根据需要）
+cp /path/to/openclaw-wechat/.env.example $EXTENSION_DIR/
+```
+
+### 3. 安装依赖
+
+在扩展目录安装 npm 依赖：
 
 ```bash
 cd ~/.openclaw/extensions/openclaw-wechat
 npm install
 ```
 
-### 3. 验证安装
+### 4. 配置 OpenClaw
 
-检查必要文件是否存在：
-
-```bash
-ls ~/.openclaw/extensions/openclaw-wechat/
-```
-
-应该包含：
-
-- `src/` - 源代码
-- `node_modules/` - 依赖
-- `package.json`
-- `index.ts`
-
-如果缺少文件，需要手动复制：
-
-```bash
-cp -r /path/to/openclaw-wechat/src ~/.openclaw/extensions/openclaw-wechat/
-cp /path/to/openclaw-wechat/package.json ~/.openclaw/extensions/openclaw-wechat/
-```
-
-安装插件后，需要配置 WeChat 渠道：
+启用并配置 WeChat 渠道：
 
 ```bash
 # 启用 WeChat 渠道
@@ -85,17 +95,17 @@ openclaw config set channels.wechat.webhookPath "/webhook/wechat"
 }
 ```
 
-### 3. 重启 OpenClaw Gateway
+### 5. 重启 OpenClaw Gateway
 
 ```bash
 openclaw gateway restart
 ```
 
-### 4. 启动 Bridge 服务
+### 6. 启动 Bridge 服务
 
 ```bash
 # 进入插件目录
-cd ~/.openclaw/extensions/wechat
+cd ~/.openclaw/extensions/openclaw-wechat
 
 # 启动 Bridge 服务
 npm run start:bridge
@@ -115,6 +125,16 @@ Bridge 服务默认配置：
 2. 复制链接到浏览器打开，或直接使用终端显示的二维码
 3. 使用微信扫描二维码登录
 4. 登录成功后，会显示登录成功信息
+
+## 🔄 更换微信账号
+
+如需更换登录的微信账号：
+
+```bash
+curl -X POST http://localhost:3001/v1/logout
+```
+
+该操作会清除会话并停止 Bridge，然后重启 Bridge 服务，再用新微信扫码登录。
 
 ## ✅ 验证对接
 
@@ -158,7 +178,7 @@ curl http://localhost:3001/v1/webhook
 ### 3. 测试消息收发
 
 - 用微信给 Bot 发消息
-- 检查 Bridge 日志：`tail -f ~/.openclaw/extensions/wechat/logs/app-*.log`
+- 检查 Bridge 日志：`tail -f ~/.openclaw/extensions/openclaw-wechat/logs/app-*.log`
 - 检查 OpenClaw 日志：`openclaw logs`
 
 ## 🔧 高级配置
@@ -166,7 +186,7 @@ curl http://localhost:3001/v1/webhook
 ### 使用 padlocal token（更稳定）
 
 1. 获取 padlocal token
-2. 修改 `~/.openclaw/extensions/wechat/.env`：
+2. 修改 `~/.openclaw/extensions/openclaw-wechat/.env`：
 
 ```bash
 WECHATY_PUPPET=wechaty-puppet-padlocal
@@ -181,7 +201,7 @@ WECHATY_PUPPET_TOKEN=your-token-here
 
 ```bash
 # 复制服务文件
-sudo cp ~/.openclaw/extensions/wechat/openclaw-wechat.service /etc/systemd/system/
+sudo cp ~/.openclaw/extensions/openclaw-wechat/openclaw-wechat.service /etc/systemd/system/
 
 # 启用服务
 sudo systemctl enable openclaw-wechat
@@ -199,7 +219,7 @@ sudo systemctl status openclaw-wechat
 
 ```bash
 # Bridge 服务日志
-tail -f ~/.openclaw/extensions/wechat/logs/app-$(date +%Y-%m-%d).log
+tail -f ~/.openclaw/extensions/openclaw-wechat/logs/app-$(date +%Y-%m-%d).log
 
 # OpenClaw 日志
 openclaw logs
@@ -218,6 +238,28 @@ curl http://localhost:3001/v1/metrics
 1. 检查 Node.js 版本：`node --version`（需要 >= 18）
 2. 检查端口是否被占用：`lsof -i :3001`
 3. 查看错误日志
+4. 确保依赖已安装：`ls node_modules/`
+
+### Q: 插件加载失败？
+
+如果看到 `Cannot find module './src/channel.js'` 错误：
+
+1. 检查 src 目录是否存在：
+
+   ```bash
+   ls ~/.openclaw/extensions/openclaw-wechat/src/
+   ```
+
+2. 如果不存在，手动复制：
+
+   ```bash
+   cp -r /path/to/openclaw-wechat/src ~/.openclaw/extensions/openclaw-wechat/
+   ```
+
+3. 重启 Gateway：
+   ```bash
+   openclaw gateway restart
+   ```
 
 ### Q: 无法扫描二维码？
 
@@ -239,9 +281,9 @@ curl http://localhost:3001/v1/metrics
 
 ## 📁 文件说明
 
-安装后，插件文件位于：`~/.openclaw/extensions/wechat/`
+安装后，插件文件位于：`~/.openclaw/extensions/openclaw-wechat/`
 
-主要文件：
+必须包含的文件：
 
 - `src/channel.ts` - 渠道实现
 - `src/bridge/server.ts` - Bridge 服务端
@@ -249,6 +291,8 @@ curl http://localhost:3001/v1/metrics
 - `src/bot.ts` - Bot 消息处理
 - `src/reply-dispatcher.ts` - 回复分发器
 - `openclaw.plugin.json` - 插件清单
+- `package.json` - 包配置
+- `tsconfig.json` - TypeScript 配置
 - `start-bridge.sh` - 启动脚本
 
 ---
