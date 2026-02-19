@@ -42,6 +42,7 @@ export type WechatMessageContext = {
     id: string;
   };
   content: string;
+  imageUrl?: string; // Base64图片数据
   timestamp: number;
   threadId: string;
   group?: {

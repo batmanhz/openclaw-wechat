@@ -479,9 +479,17 @@ export class BridgeServer {
 
   private convertToWebhookFormat(message: MessagePayload) {
     const isGroup = !!message.group;
-    const messageType = isGroup ? '80001' : '60001';
+    const isImage = message.type === 'image';
+    
+    // messageType: 60001=私聊文本, 60002=私聊图片, 80001=群聊文本, 80002=群聊图片
+    let messageType: string;
+    if (isGroup) {
+      messageType = isImage ? '80002' : '80001';
+    } else {
+      messageType = isImage ? '60002' : '60001';
+    }
 
-    return {
+    const result: any = {
       messageType,
       wcId: message.recipient.id,
       fromUser: message.sender.id,
@@ -501,6 +509,13 @@ export class BridgeServer {
         senderName: message.sender.name,
       },
     };
+
+    // 图片消息
+    if (message.imageUrl) {
+      result.imageUrl = message.imageUrl;
+    }
+
+    return result;
   }
 
   async start(): Promise<void> {

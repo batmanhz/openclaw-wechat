@@ -83,6 +83,7 @@ function normalizePayload(payload: any): {
   senderName: string;
   recipientId: string;
   content: string;
+  imageUrl?: string;
   timestamp: number;
   isGroup: boolean;
   groupId?: string;
@@ -99,6 +100,7 @@ function normalizePayload(payload: any): {
       senderName: payload.sender.name || payload.sender.id,
       recipientId: payload.recipient.id,
       content: payload.content || "",
+      imageUrl: payload.imageUrl,
       timestamp: payload.timestamp || Date.now(),
       isGroup: payload.isGroup || false,
       groupId: payload.group?.id,
@@ -124,6 +126,7 @@ function normalizePayload(payload: any): {
       timestamp: payload.timestamp || Date.now(),
       isGroup,
       groupId: payload.fromGroup,
+      imageUrl: payload.imageUrl,
       raw: payload,
     };
   }
@@ -132,7 +135,7 @@ function normalizePayload(payload: any): {
   const data = payload.data ?? {};
   const messageType = payload.messageType;
   const isGroup = messageType?.startsWith("8");
-  
+
   return {
     id: String(data.newMsgId || Date.now()),
     type: resolveMessageTypeFromCode(messageType),
@@ -140,6 +143,7 @@ function normalizePayload(payload: any): {
     senderName: data.fromUser,
     recipientId: payload.wcId,
     content: data.content ?? "",
+    imageUrl: data.imageUrl ?? payload.imageUrl,
     timestamp: data.timestamp ?? payload.timestamp ?? Date.now(),
     isGroup,
     groupId: data.fromGroup,
@@ -197,6 +201,7 @@ function convertToMessageContext(payload: any): WechatMessageContext | null {
       id: norm.recipientId,
     },
     content: norm.content,
+    imageUrl: norm.imageUrl,
     timestamp: norm.timestamp,
     threadId: norm.isGroup ? (norm.groupId || norm.senderId) : norm.senderId,
     raw: norm.raw,

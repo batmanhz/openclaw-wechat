@@ -16,6 +16,7 @@ export interface MessagePayload {
   group?: { id: string; name: string };
   mention?: string[]; // @提及的用户列表
   isMentioned?: boolean; // 是否@了机器人
+  imageUrl?: string; // 图片Base64数据 (data:image/jpeg;base64,...)
   raw: any;
 }
 
@@ -470,6 +471,27 @@ export class WechatyClient extends EventEmitter {
         raw: message,
       };
 
+      // 处理图片消息 - 提取图片Base64数据
+      if (payload.type === 'image' || payload.type === 'file') {
+        try {
+          // 检查是否是加密的图片消息（XML格式的图片）
+          const content = payload.content || '';
+          const isEncryptedImage = content.includes('<img') && content.includes('aeskey');
+          
+          if (isEncryptedImage || payload.type === 'image') {
+            console.log('Detected image message, attempting to extract...');
+            const fileBox = await message.toFileBox();
+            const base64 = await fileBox.toBase64();
+            const mimeType = fileBox.mimeType || 'image/jpeg';
+            payload.imageUrl = `data:${mimeType};base64,${base64}`;
+            payload.type = 'image'; // 强制设置为图片类型
+            console.log(`Image extracted: ${payload.imageUrl.substring(0, 50)}... (${base64.length} chars)`);
+          }
+        } catch (e) {
+          console.error('Failed to extract image:', (e as Error).message);
+        }
+      }
+
       // 处理群聊消息
       if (room) {
         payload.group = {
@@ -508,8 +530,8 @@ export class WechatyClient extends EventEmitter {
   private mapMessageType(type: any): MessagePayload['type'] {
     const typeMap: Record<number, MessagePayload['type']> = {
       7: 'text', // MessageType.Text
-      3: 'image', // MessageType.Image
-      6: 'file', // MessageType.Attachment
+      6: 'image', // MessageType.Image
+      1: 'file', // MessageType.Attachment
     };
     return typeMap[type] || 'unknown';
   }

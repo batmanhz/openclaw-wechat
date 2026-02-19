@@ -2,6 +2,38 @@ import type { ClawdbotConfig, RuntimeEnv } from "openclaw/plugin-sdk";
 import { getWeChatRuntime } from "./runtime.js";
 import { createWeChatReplyDispatcher } from "./reply-dispatcher.js";
 import type { WechatMessageContext, ResolvedWeChatAccount } from "./types.js";
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
+
+// Save base64 image to temp file and return path
+async function saveBase64ImageToTemp(base64Data: string): Promise<string> {
+  // Extract mime type and base64 content
+  const match = base64Data.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) {
+    throw new Error("Invalid base64 image data");
+  }
+  
+  const mimeType = match[1];
+  const base64Content = match[2];
+  
+  // Determine file extension
+  const ext = mimeType.includes("png") ? "png" : "jpg";
+  const tempDir = path.join(os.tmpdir(), "openclaw-wechat-images");
+  
+  // Ensure temp directory exists
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+  }
+  
+  const tempPath = path.join(tempDir, `img-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`);
+  
+  // Write file
+  const buffer = Buffer.from(base64Content, "base64");
+  fs.writeFileSync(tempPath, buffer);
+  
+  return tempPath;
+}
 
 // --- Message deduplication ---
 const processedMessages = new Map<string, number>();
@@ -55,9 +87,9 @@ export async function handleWeChatMessage(params: {
 
   log(`wechat[${accountId}]: received ${message.type} from ${message.sender.id}${isGroup ? ` in group ${message.group!.id}` : ""}`);
 
-  // Only handle text messages for now
-  if (message.type !== "text") {
-    log(`wechat[${accountId}]: ignoring non-text message type: ${message.type}`);
+  // Handle text and image messages
+  if (message.type !== "text" && message.type !== "image") {
+    log(`wechat[${accountId}]: ignoring non-text/image message type: ${message.type}`);
     return;
   }
 
@@ -95,7 +127,9 @@ export async function handleWeChatMessage(params: {
 
     // Build message body with speaker attribution
     const speaker = message.sender.name || message.sender.id;
-    const messageBody = `${speaker}: ${message.content}`;
+    const messageBody = message.type === "image" 
+      ? `${speaker}: [图片]` 
+      : `${speaker}: ${message.content}`;
 
     const envelopeFrom = isGroup
       ? `${message.group!.id}:${message.sender.id}`
@@ -109,7 +143,7 @@ export async function handleWeChatMessage(params: {
       body: messageBody,
     });
 
-    const ctxPayload = core.channel.reply.finalizeInboundContext({
+    const ctxBase: any = {
       Body: body,
       RawBody: message.content,
       CommandBody: message.content,
@@ -129,7 +163,21 @@ export async function handleWeChatMessage(params: {
       CommandAuthorized: true,
       OriginatingChannel: "wechat" as const,
       OriginatingTo: wechatTo,
-    });
+    };
+
+    // 处理图片消息 - 保存为临时文件并使用 MediaPaths
+    if (message.type === "image" && message.imageUrl) {
+      try {
+        const tempPath = await saveBase64ImageToTemp(message.imageUrl);
+        ctxBase.MediaPaths = [tempPath];
+        ctxBase.MediaTypes = ["image/jpeg"];
+        log(`wechat[${accountId}]: saved image to temp file: ${tempPath}`);
+      } catch (e) {
+        log(`wechat[${accountId}]: failed to save image: ${e}`);
+      }
+    }
+
+    const ctxPayload = core.channel.reply.finalizeInboundContext(ctxBase);
 
     // Determine reply target: in groups reply to group, in DMs reply to sender
     const replyTo = isGroup ? message.group!.id : message.sender.id;
