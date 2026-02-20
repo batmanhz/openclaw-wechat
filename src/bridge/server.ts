@@ -30,11 +30,17 @@ export class BridgeServer {
   private client: WechatyClient;
   private config: BridgeConfig;
   private webhookUrl: string = '';
+  private scanNotifyEnabled: boolean;
+  private scanNotifyPhone: string;
+  private lastScanNotifyTime: number = 0;
+  private scanNotifyCooldown: number = 60000; // 1分钟冷却，避免重复通知
 
   constructor(config: BridgeConfig) {
     this.config = config;
     this.app = express();
     this.client = new WechatyClient(config.wechaty);
+    this.scanNotifyEnabled = process.env.SCAN_NOTIFY_ENABLED === 'true';
+    this.scanNotifyPhone = process.env.SCAN_NOTIFY_PHONE || '';
     this.setupMiddleware();
     this.setupRoutes();
     this.setupEventHandlers();
@@ -425,6 +431,20 @@ export class BridgeServer {
       logger.error(`Heartbeat failed, missed ${data.missedCount} times`);
     });
 
+    // 登录失效事件 - 发送扫码通知
+    this.client.on('loginExpired', (data: { reason: string }) => {
+      logger.warn(`Login expired: ${data.reason}`);
+      metrics.setConnectionStatus('disconnected');
+    });
+
+    // 扫码事件 - 发送扫码通知（首次扫码时）
+    this.client.on('scan', async (qrCodeUrl: string, sessionId: string) => {
+      logger.info(`QR Code generated: ${qrCodeUrl}`);
+      
+      // 发送扫码通知
+      await this.sendScanNotification(qrCodeUrl, '微信需要扫码登录');
+    });
+
     // 注册告警处理
     metrics.onAlert((type, message, data) => {
       logger.warn(`Alert triggered: ${type}`, { message, ...data });
@@ -516,6 +536,62 @@ export class BridgeServer {
     }
 
     return result;
+  }
+
+  /**
+   * 发送扫码通知到 OpenClaw，请求通过 WhatsApp 转发
+   */
+  private async sendScanNotification(qrCodeUrl: string, reason: string): Promise<void> {
+    if (!this.scanNotifyEnabled || !this.scanNotifyPhone || !this.webhookUrl) {
+      logger.debug('Scan notification skipped', {
+        enabled: this.scanNotifyEnabled,
+        hasPhone: !!this.scanNotifyPhone,
+        hasWebhook: !!this.webhookUrl,
+      });
+      return;
+    }
+
+    // 冷却检查，避免频繁通知
+    const now = Date.now();
+    if (now - this.lastScanNotifyTime < this.scanNotifyCooldown) {
+      logger.debug('Scan notification skipped due to cooldown');
+      return;
+    }
+    this.lastScanNotifyTime = now;
+
+    // 构造通知消息，让 AI 理解意图并通过 WhatsApp 发送
+    const notifyMessage: MessagePayload = {
+      id: `scan-notify-${Date.now()}`,
+      type: 'text',
+      sender: { id: 'system', name: 'WeChat Bridge System' },
+      recipient: { id: 'openclaw' },
+      content: `[系统通知] 微信需要重新扫码登录。
+
+原因：${reason}
+
+请通过 WhatsApp 发送以下扫码链接给 ${this.scanNotifyPhone}：
+
+${qrCodeUrl}
+
+这是一个紧急通知，请立即执行。`,
+      timestamp: Date.now(),
+      raw: {
+        _meta: {
+          type: 'system_notification',
+          notificationType: 'wechat_scan_required',
+          targetPhone: this.scanNotifyPhone,
+          qrCodeUrl: qrCodeUrl,
+          reason: reason,
+        },
+      },
+    };
+
+    try {
+      await this.sendWebhookWithRetry(notifyMessage, 1);
+      logger.info(`📱 Scan notification sent to OpenClaw for WhatsApp delivery to ${this.scanNotifyPhone}`);
+    } catch (err) {
+      logger.error('Failed to send scan notification', err);
+    }
   }
 
   async start(): Promise<void> {
