@@ -160,20 +160,32 @@ export class WechatyClient extends EventEmitter {
         const errorMessage = error.message || '';
         const errorStack = error.stack || '';
 
-        const isTemporaryError =
+        // 需要重新扫码登录的错误（登录状态失效）
+        const isLoginExpiredError =
           errorMessage.includes('1101') ||
           errorMessage.includes('1102') ||
+          errorMessage.includes('1103');
+
+        // 临时性网络错误（可自动恢复）
+        const isTemporaryError =
           errorMessage.includes('400 != 400') ||
           errorMessage.includes('timeout') ||
           errorMessage.includes('AggregateError') ||
           errorMessage.includes('ECONNREFUSED') ||
           errorMessage.includes('socket') ||
+          errorMessage.includes('Parse Error') ||
           errorStack.includes('axios') ||
           errorStack.includes('fetch');
 
         const isLogoutError = errorMessage.includes('already logout');
 
-        if (isLogoutError) {
+        if (isLoginExpiredError) {
+          // 登录状态失效，需要重新扫码
+          console.log('[INFO] Login expired (1101/1102/1103), please re-scan QR code...');
+          this.isLoggedIn = false;
+          this.emit('loginExpired', { reason: errorMessage });
+          // 不触发重连，等待用户重新扫码
+        } else if (isLogoutError) {
           console.log('[INFO] Logout detected, waiting for new login...');
         } else if (!isTemporaryError) {
           console.log('[INFO] Non-temporary error, triggering reconnect...');
