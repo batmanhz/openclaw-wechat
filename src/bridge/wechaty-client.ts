@@ -113,6 +113,25 @@ export class WechatyClient extends EventEmitter {
   }
 
   async start(): Promise<void> {
+    await this.createAndStartBot();
+    this.startHeartbeat();
+  }
+
+  /**
+   * 创建并启动 Bot 实例
+   */
+  private async createAndStartBot(): Promise<void> {
+    // 确保旧实例已停止
+    if (this.bot) {
+      try {
+        await this.bot.stop();
+      } catch (e) {
+        // 忽略停止错误
+      }
+      this.bot = null as any;
+    }
+
+    // 创建新实例
     this.bot = WechatyBuilder.build({
       name: this.config.name || 'openclaw-wechat',
       puppet: (this.config.puppet || 'wechaty-puppet-wechat4u') as any,
@@ -123,9 +142,6 @@ export class WechatyClient extends EventEmitter {
 
     this.setupEventHandlers();
     await this.bot.start();
-
-    // 启动心跳检测
-    this.startHeartbeat();
   }
 
   private setupEventHandlers(): void {
@@ -180,11 +196,22 @@ export class WechatyClient extends EventEmitter {
         const isLogoutError = errorMessage.includes('already logout');
 
         if (isLoginExpiredError) {
-          // 登录状态失效，需要重新扫码
-          console.log('[INFO] Login expired (1101/1102/1103), please re-scan QR code...');
+          // 登录状态失效，重建 Bot 实例等待重新扫码
+          console.log('[INFO] Login expired (1101/1102/1103), rebuilding bot...');
           this.isLoggedIn = false;
+          this.isReconnecting = false;
+          this.reconnectAttempts = 0;
           this.emit('loginExpired', { reason: errorMessage });
-          // 不触发重连，等待用户重新扫码
+          
+          // 延迟后重建 bot 实例
+          setTimeout(async () => {
+            try {
+              await this.createAndStartBot();
+              console.log('[INFO] Bot rebuilt, please scan QR code to login...');
+            } catch (e: any) {
+              console.error('[ERROR] Failed to rebuild bot:', e.message);
+            }
+          }, 2000);
         } else if (isLogoutError) {
           console.log('[INFO] Logout detected, waiting for new login...');
         } else if (!isTemporaryError) {
@@ -232,16 +259,9 @@ export class WechatyClient extends EventEmitter {
       });
 
       try {
-        // 尝试停止当前连接
-        try {
-          await this.bot.stop();
-        } catch (e) {
-          // 忽略停止错误
-        }
-
-        // 重新启动
+        // 重新创建并启动 Bot
         console.log('Restarting Wechaty client...');
-        await this.bot.start();
+        await this.createAndStartBot();
 
         console.log('Reconnected successfully!');
         this.isReconnecting = false;
