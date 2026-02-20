@@ -196,22 +196,13 @@ export class WechatyClient extends EventEmitter {
         const isLogoutError = errorMessage.includes('already logout');
 
         if (isLoginExpiredError) {
-          // 登录状态失效，重建 Bot 实例等待重新扫码
-          console.log('[INFO] Login expired (1101/1102/1103), rebuilding bot...');
+          // 登录状态失效，需要重新扫码
+          console.log('[INFO] Login expired (1101/1102/1103), please re-scan QR code...');
           this.isLoggedIn = false;
           this.isReconnecting = false;
           this.reconnectAttempts = 0;
           this.emit('loginExpired', { reason: errorMessage });
-          
-          // 延迟后重建 bot 实例
-          setTimeout(async () => {
-            try {
-              await this.createAndStartBot();
-              console.log('[INFO] Bot rebuilt, please scan QR code to login...');
-            } catch (e: any) {
-              console.error('[ERROR] Failed to rebuild bot:', e.message);
-            }
-          }, 2000);
+          // 不自动重建 bot，等待 wechaty 内部触发 scan 事件
         } else if (isLogoutError) {
           console.log('[INFO] Logout detected, waiting for new login...');
         } else if (!isTemporaryError) {
