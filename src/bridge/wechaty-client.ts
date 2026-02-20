@@ -113,6 +113,17 @@ export class WechatyClient extends EventEmitter {
   }
 
   async start(): Promise<void> {
+    // 捕获 wechat4u 内部的 uncaughtException
+    process.on('uncaughtException', (error: Error) => {
+      // 忽略 wechat4u 在 logout/start 过渡期间的已知错误
+      if (error.message && error.message.includes("Cannot read properties of undefined (reading 'start')")) {
+        console.log('[DEBUG] Ignored wechat4u internal transition error');
+        return;
+      }
+      // 其他未捕获的错误重新抛出
+      throw error;
+    });
+
     await this.createAndStartBot();
     this.startHeartbeat();
   }
@@ -121,14 +132,13 @@ export class WechatyClient extends EventEmitter {
    * 创建并启动 Bot 实例
    */
   private async createAndStartBot(): Promise<void> {
-    // 确保旧实例已停止
+    // 确保旧实例已停止（但不清除引用，避免 wechat4u 内部错误）
     if (this.bot) {
       try {
         await this.bot.stop();
       } catch (e) {
         // 忽略停止错误
       }
-      this.bot = null as any;
     }
 
     // 创建新实例
@@ -760,11 +770,20 @@ export class WechatyClient extends EventEmitter {
 
     try {
       await this.bot.stop();
-    } catch (e) {
-      console.log('Bot already stopped or not running');
+      console.log('Bot stopped, restarting for new QR code...');
+      // 重新启动以触发新的扫码
+      await this.bot.start();
+    } catch (e: any) {
+      console.log('Bot restart error:', e.message);
+      // 如果重启失败，尝试完全重建
+      try {
+        await this.createAndStartBot();
+      } catch (e2) {
+        console.log('Failed to rebuild bot:', (e2 as Error).message);
+      }
     }
 
-    console.log('Logout complete. Please restart bridge to login with new account.');
+    console.log('Logout complete. Ready for new login.');
     this.emit('logout', null);
   }
 }
