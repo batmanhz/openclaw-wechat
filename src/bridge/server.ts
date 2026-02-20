@@ -571,7 +571,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     },
     wechaty: {
       name: process.env.WECHATY_NAME || 'openclaw-wechat',
-      puppet: process.env.WECHATY_PUPPET || 'wechaty-puppet-wechat',
+      puppet: process.env.WECHATY_PUPPET || 'wechaty-puppet-wechat4u',
       puppetToken: process.env.WECHATY_PUPPET_TOKEN,
       memoryCardPath: process.env.WECHATY_MEMORY_CARD_PATH || './data',
       reconnectInterval: parseInt(process.env.WECHATY_RECONNECT_INTERVAL || '5000'),

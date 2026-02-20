@@ -1,7 +1,6 @@
 import { WechatyBuilder, Contact, Room, Message } from 'wechaty';
 import { FileBox } from 'file-box';
 import { EventEmitter } from 'events';
-import { MemoryCard } from 'memory-card';
 import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from '../utils/logger.js';
@@ -69,13 +68,6 @@ export class WechatyClient extends EventEmitter {
   private loginSessionId: string = '';
   private processedMessages: Set<string> = new Set(); // 消息去重
   private maxMessageHistory: number = 1000; // 最大消息历史数量
-  private memoryCard: MemoryCard | null = null;
-  private memoryCardPath: string = '';
-
-  // 自动重连相关
-  private reconnectAttempts: number = 0;
-  private reconnectTimer: NodeJS.Timeout | null = null;
-  private isReconnecting: boolean = false;
 
   // 心跳检测相关
   private heartbeatTimer: NodeJS.Timeout | null = null;
@@ -120,87 +112,10 @@ export class WechatyClient extends EventEmitter {
     );
   }
 
-  /**
-   * 初始化 MemoryCard 会话存储
-   */
-  private async initMemoryCard(): Promise<void> {
-    try {
-      // 配置会话存储路径
-      const dataDir = this.config.memoryCardPath || './data';
-      if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir, { recursive: true });
-      }
-
-      this.memoryCardPath = path.join(dataDir, `${this.config.name}.memory-card.json`);
-      console.log(`MemoryCard path: ${this.memoryCardPath}`);
-
-      // 加载已有的会话数据
-      this.memoryCard = new MemoryCard({
-        name: this.config.name,
-      });
-
-      if (fs.existsSync(this.memoryCardPath)) {
-        console.log('Loading existing session from MemoryCard...');
-        await this.memoryCard.load();
-        console.log('Session loaded successfully');
-      }
-    } catch (error: any) {
-      console.error('Failed to initialize MemoryCard:', error.message);
-      this.memoryCard = null;
-    }
-  }
-
-  /**
-   * 保存会话到 MemoryCard
-   */
-  private async saveSession(): Promise<void> {
-    try {
-      if (this.memoryCard && this.isLoggedIn) {
-        // 保存登录状态信息
-        await this.memoryCard.set('loginState', {
-          wcId: this.wcId,
-          nickName: this.nickName,
-          timestamp: Date.now(),
-        });
-        await this.memoryCard.save();
-        console.log('Session saved to MemoryCard');
-      }
-    } catch (error: any) {
-      console.error('Failed to save session:', error.message);
-    }
-  }
-
-  /**
-   * 从 MemoryCard 恢复会话
-   */
-  private async restoreSession(): Promise<boolean> {
-    try {
-      if (this.memoryCard) {
-        const loginState = await this.memoryCard.get('loginState');
-        if (loginState) {
-          console.log(`Found previous session for: ${loginState.nickName} (${loginState.wcId})`);
-          return true;
-        }
-      }
-    } catch (error: any) {
-      console.error('Failed to restore session:', error.message);
-    }
-    return false;
-  }
-
   async start(): Promise<void> {
-    // 初始化 MemoryCard
-    await this.initMemoryCard();
-
-    // 检查是否有可恢复的会话
-    const hasSession = await this.restoreSession();
-    if (hasSession) {
-      console.log('Attempting to restore previous session...');
-    }
-
     this.bot = WechatyBuilder.build({
       name: this.config.name || 'openclaw-wechat',
-      puppet: (this.config.puppet || 'wechaty-puppet-wechat') as any,
+      puppet: (this.config.puppet || 'wechaty-puppet-wechat4u') as any,
       puppetOptions: {
         token: this.config.puppetToken,
       },
@@ -229,20 +144,11 @@ export class WechatyClient extends EventEmitter {
         this.reconnectAttempts = 0; // 重置重连计数
         console.log(`User ${user.name()} logged in`);
         this.emit('login', { wcId: this.wcId, nickName: this.nickName });
-
-        // 保存会话到 MemoryCard
-        this.saveSession();
       })
       .on('logout', (user: Contact) => {
         this.isLoggedIn = false;
         console.log(`User ${user.name()} logged out`);
         this.emit('logout', user);
-
-        // 清除会话数据
-        if (this.memoryCard) {
-          this.memoryCard.delete('loginState');
-          this.memoryCard.save().catch((e: any) => console.error('Failed to clear session:', e));
-        }
       })
       .on('message', async (message: Message) => {
         await this.handleMessage(message);
