@@ -756,34 +756,27 @@ export class WechatyClient extends EventEmitter {
 
     this.stopHeartbeat();
 
-    if (this.memoryCard) {
-      try {
-        const mcPath = path.join(process.cwd(), `${this.config.name}.memory-card.json`);
-        if (fs.existsSync(mcPath)) {
-          fs.unlinkSync(mcPath);
-          console.log('Session file deleted');
-        }
-      } catch (e) {
-        console.log('Failed to clear session:', (e as Error).message);
-      }
-    }
-
+    // 删除 session 文件
     try {
-      await this.bot.stop();
-      console.log('Bot stopped, restarting for new QR code...');
-      // 重新启动以触发新的扫码
-      await this.bot.start();
-    } catch (e: any) {
-      console.log('Bot restart error:', e.message);
-      // 如果重启失败，尝试完全重建
-      try {
-        await this.createAndStartBot();
-      } catch (e2) {
-        console.log('Failed to rebuild bot:', (e2 as Error).message);
+      const mcPath = path.join(process.cwd(), `${this.config.name}.memory-card.json`);
+      if (fs.existsSync(mcPath)) {
+        fs.unlinkSync(mcPath);
+        console.log('Session file deleted');
       }
+    } catch (e) {
+      console.log('Failed to clear session:', (e as Error).message);
     }
 
-    console.log('Logout complete. Ready for new login.');
+    // 完全重建 bot 实例
+    console.log('Rebuilding bot for new login...');
+    try {
+      await this.createAndStartBot();
+      console.log('Logout complete. Ready for new login.');
+    } catch (e: any) {
+      console.log('Failed to rebuild bot:', e.message);
+      console.log('Logout complete. Please restart bridge manually.');
+    }
+
     this.emit('logout', null);
   }
 }
