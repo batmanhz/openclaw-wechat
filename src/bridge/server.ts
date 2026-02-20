@@ -542,22 +542,29 @@ export class BridgeServer {
    * 发送扫码通知到 OpenClaw，请求通过 WhatsApp 转发
    */
   private async sendScanNotification(qrCodeUrl: string, reason: string): Promise<void> {
+    logger.info(`[Scan Notify] Checking conditions...`, {
+      enabled: this.scanNotifyEnabled,
+      hasPhone: !!this.scanNotifyPhone,
+      hasWebhook: !!this.webhookUrl,
+      lastNotifyTime: this.lastScanNotifyTime,
+      cooldownMs: this.scanNotifyCooldown,
+    });
+
     if (!this.scanNotifyEnabled || !this.scanNotifyPhone || !this.webhookUrl) {
-      logger.debug('Scan notification skipped', {
-        enabled: this.scanNotifyEnabled,
-        hasPhone: !!this.scanNotifyPhone,
-        hasWebhook: !!this.webhookUrl,
-      });
+      logger.info('[Scan Notify] Skipped: missing configuration');
       return;
     }
 
     // 冷却检查，避免频繁通知
     const now = Date.now();
-    if (now - this.lastScanNotifyTime < this.scanNotifyCooldown) {
-      logger.debug('Scan notification skipped due to cooldown');
+    const timeSinceLastNotify = now - this.lastScanNotifyTime;
+    if (timeSinceLastNotify < this.scanNotifyCooldown) {
+      logger.info(`[Scan Notify] Skipped: cooldown (${Math.round(timeSinceLastNotify / 1000)}s < ${this.scanNotifyCooldown / 1000}s)`);
       return;
     }
     this.lastScanNotifyTime = now;
+
+    logger.info(`[Scan Notify] Sending notification to ${this.scanNotifyPhone}...`);
 
     // 构造通知消息，让 AI 理解意图并通过 WhatsApp 发送
     const notifyMessage: MessagePayload = {
