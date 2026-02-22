@@ -49,12 +49,48 @@ This plugin integrates WeChat with OpenClaw using the Wechaty framework, enablin
 ### Prerequisites
 
 - Node.js >= 18
+- OpenClaw >= 2026.2.9
 - WeChat account (recommend using a secondary account for testing)
 
 ### Installation
 
+#### Option 1: Automatic Installation (Recommended)
+
+Use the provided installation script:
+
 ```bash
-openclaw plugins install @canghe/openclaw-wechat
+chmod +x install-plugin.sh
+./install-plugin.sh
+```
+
+#### Option 2: Manual Installation
+
+1. Install the plugin in OpenClaw:
+
+```bash
+openclaw plugins install /path/to/openclaw-wechat
+```
+
+2. Copy required files to the extension directory:
+
+```bash
+EXTENSION_DIR=~/.openclaw/extensions/openclaw-wechat
+
+# Copy source code
+cp -r /path/to/openclaw-wechat/src $EXTENSION_DIR/
+
+# Copy configuration files
+cp /path/to/openclaw-wechat/package.json $EXTENSION_DIR/
+cp /path/to/openclaw-wechat/tsconfig.json $EXTENSION_DIR/
+cp /path/to/openclaw-wechat/start-bridge.sh $EXTENSION_DIR/
+cp /path/to/openclaw-wechat/openclaw.plugin.json $EXTENSION_DIR/
+```
+
+3. Install dependencies:
+
+```bash
+cd ~/.openclaw/extensions/openclaw-wechat
+npm install
 ```
 
 ### Configuration
@@ -86,56 +122,86 @@ openclaw config set channels.wechat.webhookHost "your-server-ip"
 
 The Bridge service acts as a middle layer between OpenClaw and Wechaty.
 
-#### Option 1: Using Docker (Recommended)
+#### Start Bridge
+
+Navigate to the extension directory and start the Bridge service:
 
 ```bash
-docker run -d \
-  --name wechaty-bridge \
-  -p 3001:3001 \
-  -p 18790:18790 \
-  -v ./data:/app/data \
-  -v ./logs:/app/logs \
-  openclaw/wechaty-bridge:latest
+cd ~/.openclaw/extensions/openclaw-wechat
+./start-bridge.sh
 ```
 
-#### Option 2: Using npm
+Or use npm:
 
 ```bash
-npm install -g @canghe/wechaty-bridge
-wechaty-bridge start
+cd ~/.openclaw/extensions/openclaw-wechat
+npm run start:bridge
+```
+
+This will:
+
+1. Check Node.js version (requires Node.js >= 18)
+2. Install dependencies if needed
+3. Start the Bridge HTTP server on port 3001
+
+After starting, the console will display:
+
+```
+API Endpoints:
+  Health Check:  http://localhost:3001/health
+  Account Status: http://localhost:3001/v1/account/status
+  Login:         http://localhost:3001/v1/iPadLogin
 ```
 
 ### Configuration Options
 
-```yaml
-# ~/.openclaw/openclaw.json
-channels:
-  wechat:
-    enabled: true
-    bridgeUrl: 'http://localhost:3001' # Required - Bridge service URL
+Edit `~/.openclaw/openclaw.json`:
 
-    # Webhook configuration (optional for local, required for cloud)
-    # Default: localhost - no need to change for local deployment
-    webhookHost: 'localhost' # Default: localhost
-    webhookPort: 18790 # Default: 18790
-    webhookPath: '/webhook/wechat' # Default: /webhook/wechat
-
-    # Puppet configuration (optional)
-    puppet: 'wechaty-puppet-wechat' # Default: wechaty-puppet-wechat
-    # puppetToken: ""                     # Required for padlocal protocol
+```json
+{
+  "channels": {
+    "wechat": {
+      "enabled": true,
+      "bridgeUrl": "http://localhost:3001",
+      "webhookHost": "localhost",
+      "webhookPort": 18790,
+      "webhookPath": "/webhook/wechat"
+    }
+  }
+}
 ```
+
+| Option        | Description                                   | Default                 |
+| ------------- | --------------------------------------------- | ----------------------- |
+| `enabled`     | Enable the WeChat channel                     | `false`                 |
+| `bridgeUrl`   | Bridge service URL                            | `http://localhost:3001` |
+| `webhookHost` | Webhook host for OpenClaw to receive messages | `localhost`             |
+| `webhookPort` | Webhook port                                  | `18790`                 |
+| `webhookPath` | Webhook path                                  | `/webhook/wechat`       |
 
 ### First-time Login
 
-1. Start the Bridge service
-2. Start the OpenClaw gateway:
+1. Start the Bridge service:
 
 ```bash
-openclaw gateway start
+cd ~/.openclaw/extensions/openclaw-wechat
+./start-bridge.sh
 ```
 
-3. A QR code will be displayed in the console
-4. Scan it with WeChat to log in
+2. The console will display a QR code login URL:
+
+```
+Scan QR Code to login: 2
+https://wechaty.js.org/qrcode/...
+```
+
+3. **Copy the URL and open it in your browser** - a QR code will be displayed
+4. Scan the QR code with WeChat to log in
+5. After successful login, the console will show:
+
+```
+User <nickname> logged in
+```
 
 ### WeChat Account Setup
 
@@ -175,26 +241,30 @@ openclaw gateway start
 **QR Code Login (Not password!):**
 
 ```
-Step 1: Start the service
+Step 1: Run ./start-bridge.sh
   ↓
-Step 2: Console displays QR code
+Step 2: Console displays QR code URL
   ↓
-Step 3: Open WeChat on your phone
+Step 3: Copy URL and open in browser
   ↓
-Step 4: Tap "+" → "Scan"
+Step 4: Browser displays QR code image
   ↓
-Step 5: Scan the QR code in console
+Step 5: Open WeChat on your phone
   ↓
-Step 6: Confirm login on your phone
+Step 6: Tap "+" → "Scan"
   ↓
-Step 7: Bot is online! ✓
+Step 7: Scan the QR code in browser
+  ↓
+Step 8: Confirm login on your phone
+  ↓
+Step 9: Bot is online! ✓
 ```
 
 #### Session Persistence
 
 After first login, your session is automatically saved:
 
-- Session stored in local file (`./wechaty-session.json`)
+- Session stored in local file (`./openclaw-wechat.memory-card.json`)
 - Auto-reconnect after service restart
 - No need to scan QR code every time
 - To logout manually: call `POST /v1/logout` API
@@ -239,10 +309,9 @@ This will clear the session and stop the bot. Then restart bridge to scan QR cod
 
 #### Bot cannot receive messages (Local)
 
-1. Make sure Bridge service is running: `docker ps` or check the terminal
-2. Check if the gateway is running: `openclaw gateway status`
-3. Check Bridge service logs: `docker logs wechaty-bridge`
-4. For local deployment, `webhookHost` should be `localhost` (default)
+1. Make sure Bridge service is running: check terminal or `curl http://localhost:3001/health`
+2. Check if you're logged in: `curl http://localhost:3001/v1/account/status`
+3. For local deployment, `webhookHost` should be `localhost` (default)
 
 #### Bot cannot receive messages (Cloud)
 
@@ -252,16 +321,23 @@ This will clear the session and stop the bot. Then restart bridge to scan QR cod
 
 #### How to use multiple accounts
 
-```yaml
-channels:
-  wechat:
-    accounts:
-      work:
-        bridgeUrl: 'http://localhost:3001'
-        enabled: true
-      personal:
-        bridgeUrl: 'http://localhost:3002'
-        enabled: true
+```json
+{
+  "channels": {
+    "wechat": {
+      "accounts": {
+        "work": {
+          "bridgeUrl": "http://localhost:3001",
+          "enabled": true
+        },
+        "personal": {
+          "bridgeUrl": "http://localhost:3002",
+          "enabled": true
+        }
+      }
+    }
+  }
+}
 ```
 
 #### How to switch to padlocal protocol
@@ -319,12 +395,48 @@ openclaw config set channels.wechat.puppetToken "your-padlocal-token"
 ### 环境要求
 
 - Node.js >= 18
+- OpenClaw >= 2026.2.9
 - 微信账号（建议使用小号测试）
 
 ### 安装
 
+#### 方案 1：自动安装（推荐）
+
+使用提供的安装脚本：
+
 ```bash
-openclaw plugins install @canghe/openclaw-wechat
+chmod +x install-plugin.sh
+./install-plugin.sh
+```
+
+#### 方案 2：手动安装
+
+1. 在 OpenClaw 中安装插件：
+
+```bash
+openclaw plugins install /path/to/openclaw-wechat
+```
+
+2. 复制必要文件到扩展目录：
+
+```bash
+EXTENSION_DIR=~/.openclaw/extensions/openclaw-wechat
+
+# 复制源代码
+cp -r /path/to/openclaw-wechat/src $EXTENSION_DIR/
+
+# 复制配置文件
+cp /path/to/openclaw-wechat/package.json $EXTENSION_DIR/
+cp /path/to/openclaw-wechat/tsconfig.json $EXTENSION_DIR/
+cp /path/to/openclaw-wechat/start-bridge.sh $EXTENSION_DIR/
+cp /path/to/openclaw-wechat/openclaw.plugin.json $EXTENSION_DIR/
+```
+
+3. 安装依赖：
+
+```bash
+cd ~/.openclaw/extensions/openclaw-wechat
+npm install
 ```
 
 ### 配置
@@ -356,56 +468,86 @@ openclaw config set channels.wechat.webhookHost "你的服务器IP"
 
 Bridge 服务作为 OpenClaw 和 Wechaty 之间的中间层。
 
-#### 方案 1：使用 Docker（推荐）
+#### 启动 Bridge
+
+进入扩展目录并启动 Bridge 服务：
 
 ```bash
-docker run -d \
-  --name wechaty-bridge \
-  -p 3001:3001 \
-  -p 18790:18790 \
-  -v ./data:/app/data \
-  -v ./logs:/app/logs \
-  openclaw/wechaty-bridge:latest
+cd ~/.openclaw/extensions/openclaw-wechat
+./start-bridge.sh
 ```
 
-#### 方案 2：使用 npm
+或使用 npm：
 
 ```bash
-npm install -g @canghe/wechaty-bridge
-wechaty-bridge start
+cd ~/.openclaw/extensions/openclaw-wechat
+npm run start:bridge
+```
+
+这将：
+
+1. 检查 Node.js 版本（需要 Node.js >= 18）
+2. 如需要则自动安装依赖
+3. 在端口 3001 启动 Bridge HTTP 服务
+
+启动后，控制台会显示：
+
+```
+API Endpoints:
+  Health Check:  http://localhost:3001/health
+  Account Status: http://localhost:3001/v1/account/status
+  Login:         http://localhost:3001/v1/iPadLogin
 ```
 
 ### 配置选项
 
-```yaml
-# ~/.openclaw/openclaw.json
-channels:
-  wechat:
-    enabled: true
-    bridgeUrl: 'http://localhost:3001' # 必填 - Bridge 服务地址
+编辑 `~/.openclaw/openclaw.json`：
 
-    # Webhook 配置（本地部署可选，云部署必填）
-    # 默认值: localhost - 本地部署无需修改
-    webhookHost: 'localhost' # 默认: localhost
-    webhookPort: 18790 # 默认: 18790
-    webhookPath: '/webhook/wechat' # 默认: /webhook/wechat
-
-    # Puppet 配置（可选）
-    puppet: 'wechaty-puppet-wechat' # 默认: wechaty-puppet-wechat
-    # puppetToken: ""                     # 使用 padlocal 协议时需要
+```json
+{
+  "channels": {
+    "wechat": {
+      "enabled": true,
+      "bridgeUrl": "http://localhost:3001",
+      "webhookHost": "localhost",
+      "webhookPort": 18790,
+      "webhookPath": "/webhook/wechat"
+    }
+  }
+}
 ```
+
+| 配置项        | 说明                             | 默认值                  |
+| ------------- | -------------------------------- | ----------------------- |
+| `enabled`     | 启用微信通道                     | `false`                 |
+| `bridgeUrl`   | Bridge 服务地址                  | `http://localhost:3001` |
+| `webhookHost` | OpenClaw 接收消息的 webhook 主机 | `localhost`             |
+| `webhookPort` | Webhook 端口                     | `18790`                 |
+| `webhookPath` | Webhook 路径                     | `/webhook/wechat`       |
 
 ### 首次登录
 
-1. 启动 Bridge 服务
-2. 启动 OpenClaw gateway：
+1. 启动 Bridge 服务：
 
 ```bash
-openclaw gateway start
+cd ~/.openclaw/extensions/openclaw-wechat
+./start-bridge.sh
 ```
 
-3. 控制台会显示二维码
+2. 控制台会显示扫码登录链接：
+
+```
+Scan QR Code to login: 2
+https://wechaty.js.org/qrcode/...
+```
+
+3. **复制该链接并在浏览器中打开** - 页面会显示二维码
 4. 用微信扫码登录
+5. 登录成功后，控制台会显示：
+
+```
+User <昵称> logged in
+```
 
 ### 微信账号配置
 
@@ -445,29 +587,33 @@ openclaw gateway start
 **二维码登录（不是账号密码！）：**
 
 ```
-第 1 步：启动服务
-  ↓
-第 2 步：控制台显示二维码
-  ↓
-第 3 步：手机打开微信
-  ↓
-第 4 步：点击"+" → "扫一扫"
-  ↓
-第 5 步：扫描控制台的二维码
-  ↓
-第 6 步：手机上确认登录
-  ↓
-第 7 步：机器人上线！✓
+第 1 步：运行 ./start-bridge.sh
+   ↓
+第 2 步：控制台显示二维码链接
+   ↓
+第 3 步：复制链接并在浏览器中打开
+   ↓
+第 4 步：浏览器显示二维码图片
+   ↓
+第 5 步：手机打开微信
+   ↓
+第 6 步：点击"+" → "扫一扫"
+   ↓
+第 7 步：扫描浏览器中的二维码
+   ↓
+第 8 步：手机上确认登录
+   ↓
+第 9 步：机器人上线！✓
 ```
 
 #### 会话保持
 
 首次登录后会自动保存会话状态：
 
-- 会话信息保存在本地文件（`./wechaty-session.json`）
+- 会话信息保存在本地文件（`./openclaw-wechat.memory-card.json`）
 - 服务重启后自动重连
 - 无需每次都扫码
-- 手动退出：删除会话文件即可
+- 手动退出：调用 `POST /v1/logout` API
 
 #### 重要提示
 
@@ -499,10 +645,9 @@ openclaw gateway start
 
 #### 机器人收不到消息（本地）
 
-1. 确保 Bridge 服务正在运行：`docker ps` 或查看终端
-2. 检查 gateway 是否运行：`openclaw gateway status`
-3. 检查 Bridge 服务日志：`docker logs wechaty-bridge`
-4. 本地部署时，`webhookHost` 应为 `localhost`（默认值）
+1. 确保 Bridge 服务正在运行：检查终端或 `curl http://localhost:3001/health`
+2. 检查是否已登录：`curl http://localhost:3001/v1/account/status`
+3. 本地部署时，`webhookHost` 应为 `localhost`（默认值）
 
 #### 机器人收不到消息（云服务器）
 
@@ -512,16 +657,23 @@ openclaw gateway start
 
 #### 如何使用多账号
 
-```yaml
-channels:
-  wechat:
-    accounts:
-      work:
-        bridgeUrl: 'http://localhost:3001'
-        enabled: true
-      personal:
-        bridgeUrl: 'http://localhost:3002'
-        enabled: true
+```json
+{
+  "channels": {
+    "wechat": {
+      "accounts": {
+        "work": {
+          "bridgeUrl": "http://localhost:3001",
+          "enabled": true
+        },
+        "personal": {
+          "bridgeUrl": "http://localhost:3002",
+          "enabled": true
+        }
+      }
+    }
+  }
+}
 ```
 
 #### 如何切换到 padlocal 协议
