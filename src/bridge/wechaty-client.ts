@@ -395,9 +395,21 @@ export class WechatyClient extends EventEmitter {
         return;
       }
 
+      // 获取消息内容并检测是否是加密图片（XML格式）
+      const content = message.text() || '';
+      const isEncryptedImage = content.includes('<img') && content.includes('aeskey');
+      
+      // 如果检测到加密图片，强制类型为 image
+      let messageType = this.mapMessageType(type);
+      logger.info(`Message type from map: ${messageType}, isEncryptedImage: ${isEncryptedImage}`);
+      if (isEncryptedImage) {
+        messageType = 'image';
+        logger.info('Detected encrypted image message from XML content');
+      }
+
       const payload: MessagePayload = {
         id: message.id,
-        type: this.mapMessageType(type),
+        type: messageType,
         sender: {
           id: contact.id,
           name: contact.name() || contact.id,
@@ -405,29 +417,47 @@ export class WechatyClient extends EventEmitter {
         recipient: {
           id: this.wcId,
         },
-        content: message.text() || '',
+        content: content,
         timestamp: message.date().getTime(),
         raw: message,
       };
 
       // 处理图片消息 - 提取图片Base64数据
+      logger.info(`Checking if should extract image: payload.type=${payload.type}`);
       if (payload.type === 'image' || payload.type === 'file') {
         try {
-          // 检查是否是加密的图片消息（XML格式的图片）
-          const content = payload.content || '';
-          const isEncryptedImage = content.includes('<img') && content.includes('aeskey');
+          logger.info('Extracting image data...');
+          const fileBox = await message.toFileBox();
+          const base64 = await fileBox.toBase64();
+          const mimeType = fileBox.mimeType || 'image/jpeg';
           
-          if (isEncryptedImage || payload.type === 'image') {
-            console.log('Detected image message, attempting to extract...');
-            const fileBox = await message.toFileBox();
-            const base64 = await fileBox.toBase64();
-            const mimeType = fileBox.mimeType || 'image/jpeg';
+          // 限制图片大小：如果 base64 超过 3MB，则保存到文件
+          const MAX_BASE64_SIZE = 3 * 1024 * 1024; // 3MB
+          if (base64.length > MAX_BASE64_SIZE) {
+            logger.info(`Image too large (${base64.length} chars), saving to file...`);
+            // 保存到临时文件
+            const tempDir = '/tmp/openclaw-wechat-images';
+            if (!fs.existsSync(tempDir)) {
+              fs.mkdirSync(tempDir, { recursive: true });
+            }
+            const fileName = `img-${Date.now()}-${Math.random().toString(36).substring(2, 10)}.jpg`;
+            const filePath = path.join(tempDir, fileName);
+            
+            // 将 base64 转换为 buffer 并保存
+            const buffer = Buffer.from(base64, 'base64');
+            fs.writeFileSync(filePath, buffer);
+            
+            // 直接返回本地文件路径，让 OpenClaw 直接访问
+            payload.imageUrl = filePath;
+            logger.info(`Image saved to: ${filePath} (${buffer.length} bytes)`);
+          } else {
             payload.imageUrl = `data:${mimeType};base64,${base64}`;
-            payload.type = 'image'; // 强制设置为图片类型
-            console.log(`Image extracted: ${payload.imageUrl.substring(0, 50)}... (${base64.length} chars)`);
+            logger.info(`Image extracted successfully: ${payload.imageUrl.substring(0, 50)}... (${base64.length} chars)`);
           }
         } catch (e) {
-          console.error('Failed to extract image:', (e as Error).message);
+          logger.error('Failed to extract image:', e);
+          // 即使提取失败，也保留图片类型标记
+          payload.type = 'image';
         }
       }
 
@@ -476,9 +506,9 @@ export class WechatyClient extends EventEmitter {
   }
 
   async sendText(to: string, content: string): Promise<any> {
-    console.log('[DEBUG sendText] bot exists:', !!this.bot);
-    console.log('[DEBUG sendText] bot.isLoggedIn:', this.bot?.isLoggedIn);
-    console.log('[DEBUG sendText] this.isLoggedIn:', this.isLoggedIn);
+    logger.debug('[DEBUG sendText] bot exists:', { botExists: !!this.bot });
+    logger.debug('[DEBUG sendText] bot.isLoggedIn:', { botIsLoggedIn: this.bot?.isLoggedIn });
+    logger.debug('[DEBUG sendText] this.isLoggedIn:', { isLoggedIn: this.isLoggedIn });
 
     if (!this.bot?.isLoggedIn) {
       throw new Error('Not logged in');
@@ -535,7 +565,7 @@ export class WechatyClient extends EventEmitter {
         createTime: Date.now(),
       };
     } catch (error: any) {
-      console.error('Error sending image:', error.message);
+      logger.error('Error sending image:', error);
       throw new Error(`Failed to send image: ${error.message}`);
     }
   }

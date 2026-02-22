@@ -35,6 +35,29 @@ async function saveBase64ImageToTemp(base64Data: string): Promise<string> {
   return tempPath;
 }
 
+// Download image from HTTP URL to temp file
+async function downloadImageToTemp(imageUrl: string): Promise<string> {
+  const tempDir = path.join(os.tmpdir(), "openclaw-wechat-images");
+  
+  // Ensure temp directory exists
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+  }
+  
+  const tempPath = path.join(tempDir, `img-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`);
+  
+  // Download image using fetch
+  const response = await fetch(imageUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to download image: ${response.status} ${response.statusText}`);
+  }
+  
+  const buffer = Buffer.from(await response.arrayBuffer());
+  fs.writeFileSync(tempPath, buffer);
+  
+  return tempPath;
+}
+
 // --- Message deduplication ---
 const processedMessages = new Map<string, number>();
 const DEDUP_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
@@ -168,7 +191,23 @@ export async function handleWeChatMessage(params: {
     // 处理图片消息 - 保存为临时文件并使用 MediaPaths
     if (message.type === "image" && message.imageUrl) {
       try {
-        const tempPath = await saveBase64ImageToTemp(message.imageUrl);
+        let tempPath: string;
+        
+        // 根据 imageUrl 格式选择处理方式
+        if (message.imageUrl.startsWith("data:")) {
+          // Base64 格式
+          tempPath = await saveBase64ImageToTemp(message.imageUrl);
+        } else if (message.imageUrl.startsWith("http://") || message.imageUrl.startsWith("https://")) {
+          // HTTP URL 格式
+          tempPath = await downloadImageToTemp(message.imageUrl);
+        } else if (message.imageUrl.startsWith("/") && fs.existsSync(message.imageUrl)) {
+          // 本地文件路径 - 直接使用
+          tempPath = message.imageUrl;
+          log(`wechat[${accountId}]: using local file path: ${tempPath}`);
+        } else {
+          throw new Error(`Unsupported image URL format: ${message.imageUrl.substring(0, 50)}...`);
+        }
+        
         ctxBase.MediaPaths = [tempPath];
         ctxBase.MediaTypes = ["image/jpeg"];
         log(`wechat[${accountId}]: saved image to temp file: ${tempPath}`);
