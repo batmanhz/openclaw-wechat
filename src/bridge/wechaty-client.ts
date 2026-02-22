@@ -117,7 +117,10 @@ export class WechatyClient extends EventEmitter {
     // 捕获 wechat4u 内部的 uncaughtException
     process.on('uncaughtException', (error: Error) => {
       // 忽略 wechat4u 在 logout/start 过渡期间的已知错误
-      if (error.message && error.message.includes("Cannot read properties of undefined (reading 'start')")) {
+      if (
+        error.message &&
+        error.message.includes("Cannot read properties of undefined (reading 'start')")
+      ) {
         console.log('[DEBUG] Ignored wechat4u internal transition error');
         return;
       }
@@ -201,6 +204,8 @@ export class WechatyClient extends EventEmitter {
           errorMessage.includes('ECONNREFUSED') ||
           errorMessage.includes('socket') ||
           errorMessage.includes('Parse Error') ||
+          errorMessage.includes('no this.wechat4u.contacts') ||
+          errorMessage.includes('batchGetContact') ||
           errorStack.includes('axios') ||
           errorStack.includes('fetch');
 
@@ -399,7 +404,7 @@ export class WechatyClient extends EventEmitter {
       // 获取消息内容并检测是否是加密图片（XML格式）
       const content = message.text() || '';
       const isEncryptedImage = content.includes('<img') && content.includes('aeskey');
-      
+
       // 如果检测到加密图片，强制类型为 image
       let messageType = this.mapMessageType(type);
       logger.info(`Message type from map: ${messageType}, isEncryptedImage: ${isEncryptedImage}`);
@@ -431,7 +436,7 @@ export class WechatyClient extends EventEmitter {
           const fileBox = await message.toFileBox();
           const base64 = await fileBox.toBase64();
           const mimeType = fileBox.mimeType || 'image/jpeg';
-          
+
           // 限制图片大小：如果 base64 超过 3MB，则保存到文件
           const MAX_BASE64_SIZE = 3 * 1024 * 1024; // 3MB
           if (base64.length > MAX_BASE64_SIZE) {
@@ -443,17 +448,19 @@ export class WechatyClient extends EventEmitter {
             }
             const fileName = `img-${Date.now()}-${Math.random().toString(36).substring(2, 10)}.jpg`;
             const filePath = path.join(tempDir, fileName);
-            
+
             // 将 base64 转换为 buffer 并保存
             const buffer = Buffer.from(base64, 'base64');
             fs.writeFileSync(filePath, buffer);
-            
+
             // 直接返回本地文件路径，让 OpenClaw 直接访问
             payload.imageUrl = filePath;
             logger.info(`Image saved to: ${filePath} (${buffer.length} bytes)`);
           } else {
             payload.imageUrl = `data:${mimeType};base64,${base64}`;
-            logger.info(`Image extracted successfully: ${payload.imageUrl.substring(0, 50)}... (${base64.length} chars)`);
+            logger.info(
+              `Image extracted successfully: ${payload.imageUrl.substring(0, 50)}... (${base64.length} chars)`
+            );
           }
         } catch (e) {
           logger.error('Failed to extract image:', e);
