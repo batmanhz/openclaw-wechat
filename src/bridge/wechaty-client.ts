@@ -206,6 +206,9 @@ export class WechatyClient extends EventEmitter {
           errorMessage.includes('Parse Error') ||
           errorMessage.includes('no this.wechat4u.contacts') ||
           errorMessage.includes('batchGetContact') ||
+          errorMessage.includes('同步失败') ||
+          errorMessage.includes('TLS connection') ||
+          errorMessage.includes('disconnected before secure') ||
           errorStack.includes('axios') ||
           errorStack.includes('fetch');
 
