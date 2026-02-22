@@ -540,16 +540,6 @@ openclaw config set channels.wechat.puppetToken "your-padlocal-token"
 
 本插件仅供学习和研究使用，请勿用于非法用途，否则后果自负。
 
-## 交流群
-
-关于 bot 进群交流请扫码关注，并回复：openclaw-wechat
-
-![](./images/%E7%BE%A4%E8%81%8A%E4%BA%A4%E6%B5%81.bmp)
-
-## Star 趋势图
-
-[![Star History Chart](https://api.star-history.com/svg?repos=freestylefly/openclaw-wechat&type=Date)](https://star-history.com/#freestylefly/openclaw-wechat&Date)
-
 ## License
 
 MIT
