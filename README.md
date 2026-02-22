@@ -179,6 +179,23 @@ Edit `~/.openclaw/openclaw.json`:
 | `webhookPort` | Webhook port                                  | `18790`                 |
 | `webhookPath` | Webhook path                                  | `/webhook/wechat`       |
 
+### Scan Notification (Optional)
+
+Configure WhatsApp notification when WeChat requires re-scanning QR code. Create a `.env` file in the extension directory:
+
+```bash
+# ~/.openclaw/extensions/openclaw-wechat/.env
+# Scan notification config - send notification via WhatsApp when WeChat needs re-scan
+SCAN_NOTIFY_ENABLED=true
+SCAN_NOTIFY_PHONE=+86XXXXXXXXXXX  # Your WhatsApp account phone number
+```
+
+This is useful when the Bridge service runs in background - you'll receive a WhatsApp message with the QR code scan link when:
+
+- WeChat session expires
+- Login status is lost
+- Manual logout is triggered
+
 ### First-time Login
 
 1. Start the Bridge service:
@@ -524,6 +541,23 @@ API Endpoints:
 | `webhookHost` | OpenClaw 接收消息的 webhook 主机 | `localhost`             |
 | `webhookPort` | Webhook 端口                     | `18790`                 |
 | `webhookPath` | Webhook 路径                     | `/webhook/wechat`       |
+
+### 扫码通知（可选）
+
+配置当微信需要重新扫码时，通过 WhatsApp 发送通知。在扩展目录下创建 `.env` 文件：
+
+```bash
+# ~/.openclaw/extensions/openclaw-wechat/.env
+# 扫码通知配置 - 当微信需要重新扫码时，通过 WhatsApp 发送通知
+SCAN_NOTIFY_ENABLED=true
+SCAN_NOTIFY_PHONE=+86XXXXXXXXXXX  # 你的 WhatsApp 账号绑定的手机号
+```
+
+当 Bridge 服务在后台运行时，此功能非常有用。以下情况会收到包含扫码链接的 WhatsApp 消息：
+
+- 微信会话过期
+- 登录状态丢失
+- 手动登出
 
 ### 首次登录
 
