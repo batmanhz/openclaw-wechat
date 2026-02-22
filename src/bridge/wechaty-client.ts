@@ -3,6 +3,7 @@ import { FileBox } from 'file-box';
 import { EventEmitter } from 'events';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import { logger } from '../utils/logger.js';
 
 export interface MessagePayload {
@@ -435,8 +436,8 @@ export class WechatyClient extends EventEmitter {
           const MAX_BASE64_SIZE = 3 * 1024 * 1024; // 3MB
           if (base64.length > MAX_BASE64_SIZE) {
             logger.info(`Image too large (${base64.length} chars), saving to file...`);
-            // 保存到临时文件
-            const tempDir = '/tmp/openclaw-wechat-images';
+            // 保存到临时文件 - 使用与 bot.ts 相同的目录
+            const tempDir = path.join(os.tmpdir(), 'openclaw-wechat-images');
             if (!fs.existsSync(tempDir)) {
               fs.mkdirSync(tempDir, { recursive: true });
             }
