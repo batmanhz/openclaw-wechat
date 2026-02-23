@@ -124,6 +124,19 @@ export class WechatyClient extends EventEmitter {
         console.log('[DEBUG] Ignored wechat4u internal transition error');
         return;
       }
+      // 处理 "must logout first before login again" 错误
+      if (error.message && error.message.includes('must logout first before login again')) {
+        console.log('[DEBUG] Detected login conflict, need to restart bot properly');
+        console.log('[DEBUG] Stopping bot and scheduling restart...');
+        this.stop();
+        setTimeout(() => {
+          console.log('[DEBUG] Restarting bot after login conflict...');
+          this.start().catch((err) => {
+            console.error('[DEBUG] Failed to restart bot:', err.message);
+          });
+        }, 5000);
+        return;
+      }
       // 其他未捕获的错误重新抛出
       throw error;
     });
@@ -520,6 +533,11 @@ export class WechatyClient extends EventEmitter {
     logger.debug('[DEBUG sendText] bot exists:', { botExists: !!this.bot });
     logger.debug('[DEBUG sendText] bot.isLoggedIn:', { botIsLoggedIn: this.bot?.isLoggedIn });
     logger.debug('[DEBUG sendText] this.isLoggedIn:', { isLoggedIn: this.isLoggedIn });
+    logger.debug('[DEBUG sendText] params:', { to, contentLength: content?.length });
+
+    if (!to || !to.trim()) {
+      throw new Error('Target ID (to) is empty or invalid');
+    }
 
     if (!this.bot?.isLoggedIn) {
       throw new Error('Not logged in');
