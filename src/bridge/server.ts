@@ -374,10 +374,12 @@ export class BridgeServer {
       );
 
       if (this.webhookUrl) {
+        logger.info('>>> Calling sendWebhookWithRetry...');
         try {
           await this.sendWebhookWithRetry(message);
+          logger.info('>>> sendWebhookWithRetry completed');
         } catch (err) {
-          logger.error('Failed to send webhook after retries', err);
+          logger.error('>>> Failed to send webhook after retries', err);
         }
       } else {
         logger.warn(`⚠️ Webhook not configured, message not forwarded to OpenClaw`);
@@ -441,7 +443,7 @@ export class BridgeServer {
     // 扫码事件 - 发送扫码通知（首次扫码时）
     this.client.on('scan', async (qrCodeUrl: string, sessionId: string) => {
       logger.info(`QR Code generated: ${qrCodeUrl}`);
-      
+
       // 发送扫码通知
       await this.sendScanNotification(qrCodeUrl, '微信需要扫码登录');
     });
@@ -458,6 +460,16 @@ export class BridgeServer {
   ): Promise<void> {
     const payload = this.convertToWebhookFormat(message);
     const startTime = Date.now();
+
+    // 调试日志：打印完整的链接信息
+    if (payload.type === 'link') {
+      logger.info(`[DEBUG] Sending link payload:`, {
+        content: payload.content,
+        linkUrl: payload.linkUrl,
+        linkTitle: payload.linkTitle,
+        linkDescription: payload.linkDescription,
+      });
+    }
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
@@ -499,41 +511,48 @@ export class BridgeServer {
   }
 
   private convertToWebhookFormat(message: MessagePayload) {
-    const isGroup = !!message.group;
-    const isImage = message.type === 'image';
-    
-    // messageType: 60001=私聊文本, 60002=私聊图片, 80001=群聊文本, 80002=群聊图片
-    let messageType: string;
-    if (isGroup) {
-      messageType = isImage ? '80002' : '80001';
-    } else {
-      messageType = isImage ? '60002' : '60001';
+    // 链接消息转换为文本类型，避免 OpenClaw 插件需要修改
+    let messageType = message.type;
+    if (message.type === 'link') {
+      messageType = 'text';
     }
 
+    // 使用 Bridge 格式 (新格式) - 直接使用 type 字段
     const result: any = {
-      messageType,
-      wcId: message.recipient.id,
-      fromUser: message.sender.id,
-      fromGroup: message.group?.id,
-      content: message.content,
-      newMsgId: message.id,
-      timestamp: message.timestamp,
-      // 群聊相关字段
-      ...(isGroup && {
-        groupName: message.group?.name,
-        isMentioned: message.isMentioned,
-        mentionList: message.mention,
-      }),
-      // 消息元数据
-      meta: {
-        type: message.type,
-        senderName: message.sender.name,
+      id: message.id,
+      type: messageType,
+      sender: {
+        id: message.sender.id,
+        name: message.sender.name,
       },
+      recipient: {
+        id: message.recipient.id,
+      },
+      content: message.content,
+      timestamp: message.timestamp,
+      isGroup: !!message.group,
     };
+
+    // 群聊相关字段
+    if (message.group) {
+      result.group = {
+        id: message.group.id,
+        name: message.group.name,
+      };
+      result.isMentioned = message.isMentioned;
+      result.mention = message.mention;
+    }
 
     // 图片消息
     if (message.imageUrl) {
       result.imageUrl = message.imageUrl;
+    }
+
+    // 链接消息
+    if (message.type === 'link') {
+      result.linkUrl = message.linkUrl;
+      result.linkTitle = message.linkTitle;
+      result.linkDescription = message.linkDescription;
     }
 
     return result;
@@ -560,7 +579,9 @@ export class BridgeServer {
     const now = Date.now();
     const timeSinceLastNotify = now - this.lastScanNotifyTime;
     if (timeSinceLastNotify < this.scanNotifyCooldown) {
-      logger.info(`[Scan Notify] Skipped: cooldown (${Math.round(timeSinceLastNotify / 1000)}s < ${this.scanNotifyCooldown / 1000}s)`);
+      logger.info(
+        `[Scan Notify] Skipped: cooldown (${Math.round(timeSinceLastNotify / 1000)}s < ${this.scanNotifyCooldown / 1000}s)`
+      );
       return;
     }
     this.lastScanNotifyTime = now;
@@ -596,7 +617,9 @@ ${qrCodeUrl}
 
     try {
       await this.sendWebhookWithRetry(notifyMessage, 1);
-      logger.info(`📱 Scan notification sent to OpenClaw for WhatsApp delivery to ${this.scanNotifyPhone}`);
+      logger.info(
+        `📱 Scan notification sent to OpenClaw for WhatsApp delivery to ${this.scanNotifyPhone}`
+      );
     } catch (err) {
       logger.error('Failed to send scan notification', err);
     }

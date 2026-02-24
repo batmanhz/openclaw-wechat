@@ -8,15 +8,18 @@ import { logger } from '../utils/logger.js';
 
 export interface MessagePayload {
   id: string;
-  type: 'text' | 'image' | 'file' | 'unknown';
+  type: 'text' | 'image' | 'file' | 'link' | 'unknown';
   sender: { id: string; name: string };
   recipient: { id: string };
   content: string;
   timestamp: number;
   group?: { id: string; name: string };
-  mention?: string[]; // @提及的用户列表
-  isMentioned?: boolean; // 是否@了机器人
-  imageUrl?: string; // 图片Base64数据 (data:image/jpeg;base64,...)
+  mention?: string[];
+  isMentioned?: boolean;
+  imageUrl?: string;
+  linkUrl?: string;
+  linkTitle?: string;
+  linkDescription?: string;
   raw: any;
 }
 
@@ -67,8 +70,13 @@ export class WechatyClient extends EventEmitter {
   private nickName: string = '';
   private qrCodeUrl: string = '';
   private loginSessionId: string = '';
-  private processedMessages: Set<string> = new Set(); // 消息去重
-  private maxMessageHistory: number = 1000; // 最大消息历史数量
+  private processedMessages: Set<string> = new Set();
+  private maxMessageHistory: number = 1000;
+
+  // 重连相关
+  private isReconnecting: boolean = false;
+  private reconnectAttempts: number = 0;
+  private reconnectTimer: NodeJS.Timeout | null = null;
 
   // 心跳检测相关
   private heartbeatTimer: NodeJS.Timeout | null = null;
@@ -451,7 +459,7 @@ export class WechatyClient extends EventEmitter {
           logger.info('Extracting image data...');
           const fileBox = await message.toFileBox();
           const base64 = await fileBox.toBase64();
-          const mimeType = fileBox.mimeType || 'image/jpeg';
+          const mimeType = (fileBox as any).mimeType || 'image/jpeg';
 
           // 限制图片大小：如果 base64 超过 3MB，则保存到文件
           const MAX_BASE64_SIZE = 3 * 1024 * 1024; // 3MB
@@ -482,6 +490,65 @@ export class WechatyClient extends EventEmitter {
           logger.error('Failed to extract image:', e);
           // 即使提取失败，也保留图片类型标记
           payload.type = 'image';
+        }
+      }
+
+      // 处理链接消息 - 提取链接信息
+      if (payload.type === 'link') {
+        try {
+          logger.info(`Link message XML: ${content}`);
+
+          // 从 XML 格式中提取链接信息
+          const titleMatch = content.match(/<title>(.*?)<\/title>/);
+          const descMatch = content.match(/<des>(.*?)<\/des>/);
+
+          // 尝试多种 URL 匹配模式
+          // 模式1: <url><![CDATA[xxx]]></url>
+          let urlMatch = content.match(/<url><!\[CDATA\[(.*?)\]\]><\/url>/);
+          // 模式2: <url>xxx</url>
+          if (!urlMatch) {
+            urlMatch = content.match(/<url>(.*?)<\/url>/);
+          }
+          // 模式3: 匹配 mp.weixin.qq.com/s/ 开头的短链接
+          if (!urlMatch) {
+            urlMatch = content.match(/(https?:\/\/mp\.weixin\.qq\.com\/s\/[a-zA-Z0-9_-]+)/);
+          }
+
+          if (titleMatch) {
+            payload.linkTitle = titleMatch[1];
+          }
+          if (descMatch) {
+            payload.linkDescription = descMatch[1];
+          }
+
+          if (urlMatch) {
+            // 解码 HTML 实体
+            payload.linkUrl = urlMatch[1]
+              .replace(/&amp;/g, '&')
+              .replace(/&lt;/g, '<')
+              .replace(/&gt;/g, '>')
+              .replace(/&quot;/g, '"');
+          }
+
+          // 构建发送给 AI 的内容
+          let linkContent = '';
+          if (payload.linkTitle) {
+            linkContent += `标题: ${payload.linkTitle}\n`;
+          }
+          if (payload.linkDescription) {
+            linkContent += `描述: ${payload.linkDescription}\n`;
+          }
+          if (payload.linkUrl) {
+            linkContent += `链接: ${payload.linkUrl}`;
+          }
+
+          if (linkContent) {
+            payload.content = linkContent;
+          }
+
+          logger.info(`Link extracted - title: ${payload.linkTitle}, url: ${payload.linkUrl}`);
+        } catch (e) {
+          logger.error('Failed to extract link info:', e);
         }
       }
 
@@ -525,6 +592,7 @@ export class WechatyClient extends EventEmitter {
       7: 'text', // MessageType.Text
       6: 'image', // MessageType.Image
       1: 'file', // MessageType.Attachment
+      14: 'link', // MessageType.Url / Link
     };
     return typeMap[type] || 'unknown';
   }
