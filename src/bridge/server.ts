@@ -62,7 +62,15 @@ export class BridgeServer {
     }
   }
 
+  private lastSavedWebhookUrl: string = '';
+
   private saveWebhookUrl(): void {
+    // 如果 URL 没变化，不打印日志
+    if (this.lastSavedWebhookUrl === this.webhookUrl) {
+      return;
+    }
+    this.lastSavedWebhookUrl = this.webhookUrl;
+
     try {
       const dataDir = path.dirname(WEBHOOK_CONFIG_FILE);
       if (!fs.existsSync(dataDir)) {

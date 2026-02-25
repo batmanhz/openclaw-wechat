@@ -605,6 +605,7 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
 
   outbound: {
     async sendText({ cfg, to, text, accountId }) {
+      console.log('[DEBUG channel.ts sendText] to:', JSON.stringify(to));
       const account = await resolveWeChatAccount({ cfg, accountId });
       const client = new BridgeClient({
         accountId,
@@ -615,7 +616,9 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
         throw new Error('Not logged in');
       }
 
-      const result = await client.sendText(to.id, text);
+      const targetId = to?.id || to;
+      console.log('[DEBUG channel.ts sendText] targetId:', targetId);
+      const result = await client.sendText(targetId, text);
 
       return {
         channel: 'wechat',

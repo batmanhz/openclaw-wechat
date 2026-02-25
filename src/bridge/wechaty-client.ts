@@ -611,16 +611,50 @@ export class WechatyClient extends EventEmitter {
       throw new Error('Not logged in');
     }
 
+    // 判断是 wxid 还是名称
+    let targetWxId = to;
+
+    // 如果不是 wxid 格式，尝试通过名称查找联系人
+    if (!to.startsWith('wxid_') && !to.includes('@chatroom') && !to.startsWith('@')) {
+      logger.debug(`[DEBUG sendText] "${to}" is not a wxid, searching by name...`);
+      try {
+        const contacts = await this.bot.Contact.findAll();
+        const contact = contacts.find((c: any) => {
+          const name = c.name?.() || '';
+          const alias = c.alias?.() || '';
+          return name === to || alias === to || name.includes(to) || to.includes(name);
+        });
+
+        if (contact) {
+          targetWxId = contact.id;
+          logger.debug(`[DEBUG sendText] Found contact: ${contact.name?.()} -> ${targetWxId}`);
+        } else {
+          // 尝试在群聊中查找
+          const rooms = await this.bot.Room.findAll();
+          for (const room of rooms) {
+            const topic = await room.topic();
+            if (topic && topic.includes(to)) {
+              targetWxId = room.id;
+              logger.debug(`[DEBUG sendText] Found room: ${topic} -> ${targetWxId}`);
+              break;
+            }
+          }
+        }
+      } catch (e: any) {
+        logger.error('[DEBUG sendText] Contact search failed:', e.message);
+      }
+    }
+
     // 先尝试作为联系人查找
-    let target: Contact | Room | null = await this.bot.Contact.find({ id: to });
+    let target: Contact | Room | null = await this.bot.Contact.find({ id: targetWxId });
 
     // 如果没找到，尝试作为群查找
-    if (!target && to.includes('@chatroom')) {
-      target = await this.bot.Room.find({ id: to });
+    if (!target && targetWxId.includes('@chatroom')) {
+      target = await this.bot.Room.find({ id: targetWxId });
     }
 
     if (!target) {
-      throw new Error(`Target ${to} not found`);
+      throw new Error(`Target ${to} (resolved: ${targetWxId}) not found`);
     }
 
     const msg = await target.say(content);
