@@ -1,5 +1,5 @@
-import http from "http";
-import type { WechatMessageContext } from "./types.js";
+import http from 'http';
+import type { WechatMessageContext } from './types.js';
 
 interface CallbackServerOptions {
   port: number;
@@ -14,11 +14,11 @@ export async function startCallbackServer(
 
   const server = http.createServer((req, res) => {
     // URL may include query params, so use startsWith
-    const url = req.url?.split("?")[0] || "";
-    if (url === "/webhook/wechat" && req.method === "POST") {
-      let body = "";
-      req.on("data", (chunk) => (body += chunk));
-      req.on("end", async () => {
+    const url = req.url?.split('?')[0] || '';
+    if (url === '/webhook/wechat' && req.method === 'POST') {
+      let body = '';
+      req.on('data', (chunk) => (body += chunk));
+      req.on('end', async () => {
         try {
           const payload = JSON.parse(body);
           const message = convertToMessageContext(payload);
@@ -27,19 +27,19 @@ export async function startCallbackServer(
             onMessage(message);
           }
 
-          res.writeHead(200).end("OK");
+          res.writeHead(200).end('OK');
         } catch (err) {
-          console.error("Failed to process webhook:", err);
-          res.writeHead(400).end("Bad Request");
+          console.error('Failed to process webhook:', err);
+          res.writeHead(400).end('Bad Request');
         }
       });
     } else {
-      res.writeHead(404).end("Not Found");
+      res.writeHead(404).end('Not Found');
     }
   });
 
   return new Promise((resolve, reject) => {
-    server.listen(port, "0.0.0.0", () => {
+    server.listen(port, '0.0.0.0', () => {
       console.log(`📡 Webhook server listening on 0.0.0.0:${port}`);
       console.log(`   Endpoint: http://localhost:${port}/webhook/wechat`);
 
@@ -49,12 +49,12 @@ export async function startCallbackServer(
         });
       };
 
-      abortSignal?.addEventListener("abort", stop);
+      abortSignal?.addEventListener('abort', stop);
 
       resolve({ port, stop });
     });
 
-    server.on("error", (err) => {
+    server.on('error', (err) => {
       reject(err);
     });
   });
@@ -95,11 +95,11 @@ function normalizePayload(payload: any): {
   if (payload.sender && payload.recipient) {
     return {
       id: payload.id || String(Date.now()),
-      type: payload.type || "unknown",
+      type: payload.type || 'unknown',
       senderId: payload.sender.id,
       senderName: payload.sender.name || payload.sender.id,
       recipientId: payload.recipient.id,
-      content: payload.content || "",
+      content: payload.content || '',
       imageUrl: payload.imageUrl,
       timestamp: payload.timestamp || Date.now(),
       isGroup: payload.isGroup || false,
@@ -114,15 +114,15 @@ function normalizePayload(payload: any): {
   // Proxy flat format: fromUser is at top level
   if (payload.fromUser) {
     const { messageType, wcId } = payload;
-    const isGroup = messageType?.startsWith("8");
-    
+    const isGroup = messageType?.startsWith('8');
+
     return {
       id: String(payload.newMsgId || Date.now()),
       type: resolveMessageTypeFromCode(messageType),
       senderId: payload.fromUser,
       senderName: payload.fromUser,
       recipientId: wcId,
-      content: payload.content ?? "",
+      content: payload.content ?? '',
       timestamp: payload.timestamp || Date.now(),
       isGroup,
       groupId: payload.fromGroup,
@@ -134,7 +134,7 @@ function normalizePayload(payload: any): {
   // 苍何服务云 raw format: fields nested under data
   const data = payload.data ?? {};
   const messageType = payload.messageType;
-  const isGroup = messageType?.startsWith("8");
+  const isGroup = messageType?.startsWith('8');
 
   return {
     id: String(data.newMsgId || Date.now()),
@@ -142,7 +142,7 @@ function normalizePayload(payload: any): {
     senderId: data.fromUser,
     senderName: data.fromUser,
     recipientId: payload.wcId,
-    content: data.content ?? "",
+    content: data.content ?? '',
     imageUrl: data.imageUrl ?? payload.imageUrl,
     timestamp: data.timestamp ?? payload.timestamp ?? Date.now(),
     isGroup,
@@ -154,29 +154,29 @@ function normalizePayload(payload: any): {
 /** Map messageType code to a WechatMessageContext type */
 function resolveMessageTypeFromCode(messageType: string): string {
   switch (messageType) {
-    case "60001": // private text
-    case "80001": // group text
-      return "text";
-    case "60002": // private image
-    case "80002": // group image
-      return "image";
-    case "60003": // private video
-    case "80003": // group video
-      return "video";
-    case "60004": // private voice
-    case "80004": // group voice
-      return "voice";
-    case "60008": // private file
-    case "80008": // group file
-      return "file";
+    case '60001': // private text
+    case '80001': // group text
+      return 'text';
+    case '60002': // private image
+    case '80002': // group image
+      return 'image';
+    case '60003': // private video
+    case '80003': // group video
+      return 'video';
+    case '60004': // private voice
+    case '80004': // group voice
+      return 'voice';
+    case '60008': // private file
+    case '80008': // group file
+      return 'file';
     default:
-      return "unknown";
+      return 'unknown';
   }
 }
 
 function convertToMessageContext(payload: any): WechatMessageContext | null {
   // Legacy: Offline notification
-  if (payload.messageType === "30000") {
+  if (payload.messageType === '30000') {
     const wcId = payload.wcId;
     const offlineContent = payload.content ?? payload.data?.content;
     console.log(`Account ${wcId} is offline: ${offlineContent}`);
@@ -192,7 +192,7 @@ function convertToMessageContext(payload: any): WechatMessageContext | null {
 
   const result: WechatMessageContext = {
     id: norm.id,
-    type: norm.type as WechatMessageContext["type"],
+    type: norm.type as WechatMessageContext['type'],
     sender: {
       id: norm.senderId,
       name: norm.senderName,
@@ -203,14 +203,14 @@ function convertToMessageContext(payload: any): WechatMessageContext | null {
     content: norm.content,
     imageUrl: norm.imageUrl,
     timestamp: norm.timestamp,
-    threadId: norm.isGroup ? (norm.groupId || norm.senderId) : norm.senderId,
+    threadId: norm.isGroup ? norm.groupId || norm.senderId : norm.senderId,
     raw: norm.raw,
   };
 
   if (norm.isGroup && norm.groupId) {
     result.group = {
       id: norm.groupId,
-      name: norm.groupName || "",
+      name: norm.groupName || '',
     };
   }
 

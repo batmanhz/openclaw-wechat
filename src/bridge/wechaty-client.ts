@@ -8,7 +8,7 @@ import { logger } from '../utils/logger.js';
 
 export interface MessagePayload {
   id: string;
-  type: 'text' | 'image' | 'file' | 'link' | 'unknown';
+  type: 'text' | 'image' | 'video' | 'file' | 'link' | 'unknown';
   sender: { id: string; name: string };
   recipient: { id: string };
   content: string;
@@ -17,6 +17,9 @@ export interface MessagePayload {
   mention?: string[];
   isMentioned?: boolean;
   imageUrl?: string;
+  videoUrl?: string;
+  videoThumbUrl?: string;
+  voiceUrl?: string;
   linkUrl?: string;
   linkTitle?: string;
   linkDescription?: string;
@@ -493,6 +496,60 @@ export class WechatyClient extends EventEmitter {
         }
       }
 
+      // 处理视频消息 - 提取视频文件
+      if (payload.type === 'video') {
+        try {
+          logger.info('Extracting video data...');
+          const fileBox = await message.toFileBox();
+
+          // 保存到临时文件
+          const tempDir = path.join(os.tmpdir(), 'openclaw-wechat-videos');
+          if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, { recursive: true });
+          }
+
+          const ext = fileBox.name?.includes('.') ? fileBox.name.split('.').pop() : 'mp4';
+          const fileName = `video-${Date.now()}-${Math.random().toString(36).substring(2, 10)}.${ext}`;
+          const filePath = path.join(tempDir, fileName);
+
+          // 保存视频文件
+          await fileBox.toFile(filePath);
+          payload.videoUrl = filePath;
+          payload.content = `${payload.sender.name || 'Someone'} 分享了一个视频`;
+          logger.info(`Video saved to: ${filePath}`);
+        } catch (e) {
+          logger.error('Failed to extract video:', e);
+          payload.type = 'unknown';
+        }
+      }
+
+      // 处理语音消息 - 提取语音文件
+      if (payload.type === 'voice') {
+        try {
+          logger.info('Extracting voice data...');
+          const fileBox = await message.toFileBox();
+
+          // 保存到临时文件
+          const tempDir = path.join(os.tmpdir(), 'openclaw-wechat-voices');
+          if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, { recursive: true });
+          }
+
+          const ext = fileBox.name?.includes('.') ? fileBox.name.split('.').pop() : 'ogg';
+          const fileName = `voice-${Date.now()}-${Math.random().toString(36).substring(2, 10)}.${ext}`;
+          const filePath = path.join(tempDir, fileName);
+
+          // 保存语音文件
+          await fileBox.toFile(filePath);
+          payload.voiceUrl = filePath;
+          payload.content = `${payload.sender.name || 'Someone'} 发了一段语音`;
+          logger.info(`Voice saved to: ${filePath}`);
+        } catch (e) {
+          logger.error('Failed to extract voice:', e);
+          payload.type = 'unknown';
+        }
+      }
+
       // 处理链接消息 - 提取链接信息
       if (payload.type === 'link') {
         try {
@@ -591,6 +648,11 @@ export class WechatyClient extends EventEmitter {
     const typeMap: Record<number, MessagePayload['type']> = {
       7: 'text', // MessageType.Text
       6: 'image', // MessageType.Image
+      2: 'voice', // MessageType.Voice
+      4: 'voice', // MessageType.Voice (另一种)
+      34: 'voice', // MessageType.Voice
+      15: 'video', // MessageType.Video (微信视频消息)
+      43: 'video', // MessageType.Video (另一种视频类型)
       1: 'file', // MessageType.Attachment
       14: 'link', // MessageType.Url / Link
     };

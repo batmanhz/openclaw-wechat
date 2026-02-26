@@ -1,4 +1,4 @@
-import type { WechatAccountConfig, WechatConfig } from "./config-schema.js";
+import type { WechatAccountConfig, WechatConfig } from './config-schema.js';
 
 // Re-export for convenience
 export type { WechatConfig, WechatAccountConfig };
@@ -8,23 +8,23 @@ export type ResolvedWeChatAccount = {
   enabled: boolean;
   configured: boolean;
   name?: string;
-  bridgeUrl: string;       // Bridge 服务地址
+  bridgeUrl: string; // Bridge 服务地址
   wcId?: string;
   isLoggedIn: boolean;
   nickName?: string;
   headUrl?: string;
-  webhookHost?: string;    // Webhook 地址（默认 localhost）
+  webhookHost?: string; // Webhook 地址（默认 localhost）
   webhookPort: number;
-  webhookPath: string;     // Webhook 路径
+  webhookPath: string; // Webhook 路径
   natappEnabled: boolean;
   natapiWebPort: number;
   config: WechatAccountConfig;
 };
 
 export type LoginStatus =
-  | { status: "waiting" }
-  | { status: "need_verify"; verifyUrl: string }
-  | { status: "logged_in"; wcId: string; nickName: string; headUrl?: string };
+  | { status: 'waiting' }
+  | { status: 'need_verify'; verifyUrl: string }
+  | { status: 'logged_in'; wcId: string; nickName: string; headUrl?: string };
 
 export type BridgeClientConfig = {
   accountId: string;
@@ -33,7 +33,7 @@ export type BridgeClientConfig = {
 
 export type WechatMessageContext = {
   id: string;
-  type: "text" | "image" | "video" | "file" | "voice" | "unknown";
+  type: 'text' | 'image' | 'file' | 'voice' | 'unknown';
   sender: {
     id: string;
     name: string;
@@ -42,7 +42,7 @@ export type WechatMessageContext = {
     id: string;
   };
   content: string;
-  imageUrl?: string; // Base64图片数据
+  imageUrl?: string;
   timestamp: number;
   threadId: string;
   group?: {

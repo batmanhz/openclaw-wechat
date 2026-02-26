@@ -469,9 +469,9 @@ export class BridgeServer {
     const payload = this.convertToWebhookFormat(message);
     const startTime = Date.now();
 
-    // 调试日志：打印完整的链接信息
+    // 链接消息日志
     if (payload.type === 'link') {
-      logger.info(`[DEBUG] Sending link payload:`, {
+      logger.info('Sending link payload', {
         content: payload.content,
         linkUrl: payload.linkUrl,
         linkTitle: payload.linkTitle,
@@ -519,10 +519,24 @@ export class BridgeServer {
   }
 
   private convertToWebhookFormat(message: MessagePayload) {
-    // 链接消息转换为文本类型，避免 OpenClaw 插件需要修改
+    // 链接和视频消息转换为文本类型，避免 OpenClaw 插件需要修改
     let messageType = message.type;
+    let content = message.content;
+
     if (message.type === 'link') {
       messageType = 'text';
+    }
+
+    // 视频消息转换为文本，内容包含视频路径
+    if (message.type === 'video' && message.videoUrl) {
+      messageType = 'text';
+      content = `[media attached: ${message.videoUrl} (video/mp4)]`;
+    }
+
+    // 语音消息转换为文本，内容包含语音路径
+    if (message.type === 'voice' && message.voiceUrl) {
+      messageType = 'text';
+      content = `[media attached: ${message.voiceUrl} (audio/ogg; codecs=opus)]`;
     }
 
     // 使用 Bridge 格式 (新格式) - 直接使用 type 字段
@@ -536,7 +550,7 @@ export class BridgeServer {
       recipient: {
         id: message.recipient.id,
       },
-      content: message.content,
+      content: content,
       timestamp: message.timestamp,
       isGroup: !!message.group,
     };
