@@ -16,7 +16,7 @@ export class BridgeClient {
     this.accountId = config.accountId;
     if (!config.baseUrl) {
       throw new Error(
-        'bridgeUrl is required. Please configure it with: openclaw config set channels.wechat.bridgeUrl "http://localhost:3001"'
+        'bridgeUrl is required. Please configure it with: openclaw config set channels.openclaw-wechat.bridgeUrl "http://localhost:3001"'
       );
     }
     this.baseUrl = config.baseUrl.replace(/\/$/, ''); // Remove trailing slash

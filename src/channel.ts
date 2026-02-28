@@ -7,7 +7,7 @@ import { handleWeChatMessage } from './bot.js';
 import { displayQRCode, displayLoginSuccess } from './utils/qrcode.js';
 
 // Bridge 服务地址（本地部署，无需公网 IP）
-// openclaw config set channels.wechat.bridgeUrl "http://localhost:3001"
+// openclaw config set channels.openclaw-wechat.bridgeUrl "http://localhost:3001"
 
 const DEFAULT_BRIDGE_URL = 'http://localhost:3001';
 const DEFAULT_WEBHOOK_HOST = 'localhost';
@@ -172,7 +172,7 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
           ...cfg,
           channels: {
             ...cfg.channels,
-            wechat: {
+            'openclaw-wechat': {
               ...wechatCfg,
               enabled,
             },
@@ -189,7 +189,7 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
         ...cfg,
         channels: {
           ...cfg.channels,
-          wechat: {
+          'openclaw-wechat': {
             ...wechatCfg,
             accounts: {
               ...wechatCfg?.accounts,
@@ -208,10 +208,10 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
       const isDefault = accountId === DEFAULT_ACCOUNT_ID;
 
       if (isDefault) {
-        // 删除整个 wechat 配置
+        // 删除整个 openclaw-wechat 配置
         const next = { ...cfg } as ClawdbotConfig;
         const nextChannels = { ...cfg.channels };
-        delete (nextChannels as Record<string, unknown>).wechat;
+        delete (nextChannels as Record<string, unknown>)['openclaw-wechat'];
         if (Object.keys(nextChannels).length > 0) {
           next.channels = nextChannels;
         } else {
@@ -226,7 +226,7 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
       const nextCfg = { ...cfg } as ClawdbotConfig;
       nextCfg.channels = {
         ...cfg.channels,
-        wechat: {
+        'openclaw-wechat': {
           ...wechatCfg,
           accounts: Object.keys(accounts).length > 0 ? accounts : undefined,
         },
@@ -277,7 +277,7 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
           ...cfg,
           channels: {
             ...cfg.channels,
-            wechat: {
+            'openclaw-wechat': {
               ...wechatCfg,
               enabled: true,
             },
@@ -289,7 +289,7 @@ export const wechatPlugin: ChannelPlugin<ResolvedWeChatAccount> = {
         ...cfg,
         channels: {
           ...cfg.channels,
-          wechat: {
+          'openclaw-wechat': {
             ...wechatCfg,
             accounts: {
               ...wechatCfg?.accounts,

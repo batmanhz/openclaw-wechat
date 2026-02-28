@@ -101,10 +101,10 @@ For local deployment, you only need to set the Bridge URL:
 
 ```bash
 # Set Bridge URL (default: http://localhost:3001)
-openclaw config set channels.wechat.bridgeUrl "http://localhost:3001"
+openclaw config set channels.openclaw-wechat.bridgeUrl "http://localhost:3001"
 
 # Enable the channel
-openclaw config set channels.wechat.enabled true
+openclaw config set channels.openclaw-wechat.enabled true
 ```
 
 **That's it!** For local deployment, no other configuration is needed. All components communicate via localhost.
@@ -115,7 +115,7 @@ Only needed if deploying components on separate machines:
 
 ```bash
 # Set public webhook URL for remote access
-openclaw config set channels.wechat.webhookHost "your-server-ip"
+openclaw config set channels.openclaw-wechat.webhookHost "your-server-ip"
 ```
 
 ### Bridge Setup
@@ -363,8 +363,8 @@ This will clear the session and stop the bot. Then restart bridge to scan QR cod
 2. Configure:
 
 ```bash
-openclaw config set channels.wechat.puppet "wechaty-puppet-padlocal"
-openclaw config set channels.wechat.puppetToken "your-padlocal-token"
+openclaw config set channels.openclaw-wechat.puppet "wechaty-puppet-padlocal"
+openclaw config set channels.openclaw-wechat.puppetToken "your-padlocal-token"
 ```
 
 ---
@@ -464,10 +464,10 @@ npm install
 
 ```bash
 # 设置 Bridge URL（默认: http://localhost:3001）
-openclaw config set channels.wechat.bridgeUrl "http://localhost:3001"
+openclaw config set channels.openclaw-wechat.bridgeUrl "http://localhost:3001"
 
 # 启用通道
-openclaw config set channels.wechat.enabled true
+openclaw config set channels.openclaw-wechat.enabled true
 ```
 
 **完成！** 本地部署不需要其他配置，所有组件通过 localhost 通信。
@@ -478,7 +478,7 @@ openclaw config set channels.wechat.enabled true
 
 ```bash
 # 设置公网 webhook 地址（远程访问时需要）
-openclaw config set channels.wechat.webhookHost "你的服务器IP"
+openclaw config set channels.openclaw-wechat.webhookHost "你的服务器IP"
 ```
 
 ### Bridge 配置
@@ -716,8 +716,8 @@ User <昵称> logged in
 2. 配置：
 
 ```bash
-openclaw config set channels.wechat.puppet "wechaty-puppet-padlocal"
-openclaw config set channels.wechat.puppetToken "your-padlocal-token"
+openclaw config set channels.openclaw-wechat.puppet "wechaty-puppet-padlocal"
+openclaw config set channels.openclaw-wechat.puppetToken "your-padlocal-token"
 ```
 
 ---

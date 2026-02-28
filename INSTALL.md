@@ -83,15 +83,15 @@ npm install
 
 ```bash
 # 启用 WeChat 渠道
-openclaw config set channels.wechat.enabled true
+openclaw config set channels.openclaw-wechat.enabled true
 
 # 设置 Bridge 服务地址
-openclaw config set channels.wechat.bridgeUrl "http://localhost:3001"
+openclaw config set channels.openclaw-wechat.bridgeUrl "http://localhost:3001"
 
 # 设置 webhook 端口（插件的回调端口，默认 18790）
-openclaw config set channels.wechat.webhookHost "localhost"
-openclaw config set channels.wechat.webhookPort 18790
-openclaw config set channels.wechat.webhookPath "/webhook/wechat"
+openclaw config set channels.openclaw-wechat.webhookHost "localhost"
+openclaw config set channels.openclaw-wechat.webhookPort 18790
+openclaw config set channels.openclaw-wechat.webhookPath "/webhook/wechat"
 ```
 
 或者直接编辑配置文件 `~/.openclaw/openclaw.json`：
@@ -287,7 +287,7 @@ curl http://localhost:3001/v1/metrics
 1. 检查 webhook 地址配置是否正确
 2. 确认 Bridge 和 OpenClaw 在同一台机器
 3. 查看 Bridge 日志是否有 "Webhook registered" 信息
-4. 检查 OpenClaw 配置：`openclaw config get channels.wechat`
+4. 检查 OpenClaw 配置：`openclaw config get channels.openclaw-wechat`
 
 ### Q: 发送消息失败？
 
