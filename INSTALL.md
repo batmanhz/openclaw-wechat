@@ -99,7 +99,7 @@ openclaw config set channels.openclaw-wechat.webhookPath "/webhook/wechat"
 ```json
 {
   "channels": {
-    "wechat": {
+    "openclaw-wechat": {
       "enabled": true,
       "bridgeUrl": "http://localhost:3001",
       "webhookHost": "localhost",
