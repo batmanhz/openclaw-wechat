@@ -84,6 +84,8 @@ function normalizePayload(payload: any): {
   recipientId: string;
   content: string;
   imageUrl?: string;
+  videoUrl?: string;
+  voiceUrl?: string;
   timestamp: number;
   isGroup: boolean;
   groupId?: string;
@@ -101,6 +103,8 @@ function normalizePayload(payload: any): {
       recipientId: payload.recipient.id,
       content: payload.content || '',
       imageUrl: payload.imageUrl,
+      videoUrl: payload.videoUrl,
+      voiceUrl: payload.voiceUrl,
       timestamp: payload.timestamp || Date.now(),
       isGroup: payload.isGroup || false,
       groupId: payload.group?.id,
@@ -127,6 +131,8 @@ function normalizePayload(payload: any): {
       isGroup,
       groupId: payload.fromGroup,
       imageUrl: payload.imageUrl,
+      videoUrl: payload.videoUrl,
+      voiceUrl: payload.voiceUrl,
       raw: payload,
     };
   }
@@ -144,6 +150,8 @@ function normalizePayload(payload: any): {
     recipientId: payload.wcId,
     content: data.content ?? '',
     imageUrl: data.imageUrl ?? payload.imageUrl,
+    videoUrl: data.videoUrl ?? payload.videoUrl,
+    voiceUrl: data.voiceUrl ?? payload.voiceUrl,
     timestamp: data.timestamp ?? payload.timestamp ?? Date.now(),
     isGroup,
     groupId: data.fromGroup,
@@ -202,6 +210,8 @@ function convertToMessageContext(payload: any): WechatMessageContext | null {
     },
     content: norm.content,
     imageUrl: norm.imageUrl,
+    videoUrl: norm.videoUrl,
+    voiceUrl: norm.voiceUrl,
     timestamp: norm.timestamp,
     threadId: norm.isGroup ? norm.groupId || norm.senderId : norm.senderId,
     raw: norm.raw,

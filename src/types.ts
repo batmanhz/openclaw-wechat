@@ -33,7 +33,7 @@ export type BridgeClientConfig = {
 
 export type WechatMessageContext = {
   id: string;
-  type: 'text' | 'image' | 'file' | 'voice' | 'unknown';
+  type: 'text' | 'image' | 'file' | 'voice' | 'video' | 'link' | 'unknown';
   sender: {
     id: string;
     name: string;
@@ -43,6 +43,8 @@ export type WechatMessageContext = {
   };
   content: string;
   imageUrl?: string;
+  videoUrl?: string;
+  voiceUrl?: string;
   timestamp: number;
   threadId: string;
   group?: {

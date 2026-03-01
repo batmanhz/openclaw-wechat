@@ -570,6 +570,16 @@ export class BridgeServer {
       result.imageUrl = message.imageUrl;
     }
 
+    // 视频消息
+    if (message.videoUrl) {
+      result.videoUrl = message.videoUrl;
+    }
+
+    // 语音消息
+    if (message.voiceUrl) {
+      result.voiceUrl = message.voiceUrl;
+    }
+
     // 链接消息
     if (message.type === 'link') {
       result.linkUrl = message.linkUrl;
