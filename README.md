@@ -341,7 +341,7 @@ This will clear the session and stop the bot. Then restart bridge to scan QR cod
 ```json
 {
   "channels": {
-    "wechat": {
+    "openclaw-wechat": {
       "accounts": {
         "work": {
           "bridgeUrl": "http://localhost:3001",
@@ -523,7 +523,7 @@ API Endpoints:
 ```json
 {
   "channels": {
-    "wechat": {
+    "openclaw-wechat": {
       "enabled": true,
       "bridgeUrl": "http://localhost:3001",
       "webhookHost": "localhost",
