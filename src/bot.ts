@@ -118,9 +118,9 @@ export async function handleWeChatMessage(params: {
     `wechat[${accountId}]: received ${message.type} from ${message.sender.id}${isGroup ? ` in group ${message.group!.id}` : ''}`
   );
 
-  // Handle text and image messages
-  if (message.type !== 'text' && message.type !== 'image') {
-    log(`wechat[${accountId}]: ignoring non-text/image message type: ${message.type}`);
+  // Handle text, image, and file messages (file messages are converted to text with file path)
+  if (message.type !== 'text' && message.type !== 'image' && message.type !== 'file') {
+    log(`wechat[${accountId}]: ignoring non-text/image/file message type: ${message.type}`);
     return;
   }
 

@@ -496,6 +496,32 @@ export class WechatyClient extends EventEmitter {
         }
       }
 
+      // 处理文件消息 - 提取文件到临时目录
+      if (payload.type === 'file') {
+        try {
+          logger.info('Extracting file data...');
+          const fileBox = await message.toFileBox();
+          const fileName = fileBox.name || 'unknown-file';
+
+          // 保存到临时文件
+          const tempDir = path.join(os.tmpdir(), 'openclaw-wechat-files');
+          if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, { recursive: true });
+          }
+
+          const fileNameSafe = `file-${Date.now()}-${Math.random().toString(36).substring(2, 10)}-${fileName}`;
+          const filePath = path.join(tempDir, fileNameSafe);
+
+          // 保存文件
+          await fileBox.toFile(filePath);
+          payload.content = `${payload.sender.name || 'Someone'} 发送了一个文件: ${fileName}\n文件路径: ${filePath}`;
+          logger.info(`File saved to: ${filePath}`);
+        } catch (e) {
+          logger.error('Failed to extract file:', e);
+          payload.content = `${payload.sender.name || 'Someone'} 发送了一个文件（暂无法下载）`;
+        }
+      }
+
       // 处理视频消息 - 提取视频文件
       if (payload.type === 'video') {
         try {
@@ -653,6 +679,7 @@ export class WechatyClient extends EventEmitter {
       34: 'voice', // MessageType.Voice
       15: 'video', // MessageType.Video (微信视频消息)
       43: 'video', // MessageType.Video (另一种视频类型)
+      16: 'video', // MessageType.Video (公众号视频转发)
       1: 'file', // MessageType.Attachment
       14: 'link', // MessageType.Url / Link
     };
