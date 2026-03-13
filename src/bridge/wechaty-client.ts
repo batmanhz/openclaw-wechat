@@ -772,8 +772,21 @@ export class WechatyClient extends EventEmitter {
         throw new Error(`Target ${to} not found`);
       }
 
-      // 从 URL 创建 FileBox
-      const fileBox = FileBox.fromUrl(imageUrl);
+      // 根据路径类型创建 FileBox
+      let fileBox: FileBox;
+      if (imageUrl.startsWith('file://')) {
+        // 本地文件路径
+        const localPath = imageUrl.replace('file://', '');
+        fileBox = FileBox.fromFile(localPath);
+      } else if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+        // HTTP URL
+        fileBox = FileBox.fromUrl(imageUrl);
+      } else if (imageUrl.startsWith('/')) {
+        // 绝对路径（无前缀）
+        fileBox = FileBox.fromFile(imageUrl);
+      } else {
+        throw new Error(`Unsupported image URL protocol: ${imageUrl}`);
+      }
 
       // 发送图片
       const msg = await target.say(fileBox);
